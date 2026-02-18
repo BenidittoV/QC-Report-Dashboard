@@ -495,21 +495,18 @@ def run_performance_block(df_base: pd.DataFrame, header_badges_html: str, title_
         c1, c2, c3 = st.columns(3)
 
         c1.metric(
-            "AI Interest",
+            "Ragu/ Minat menurut AI/ Excel",
             total_ai,
-            help="Berdasarkan sentiment_category (Potensi / Ragu-ragu)"
         )
 
         c2.metric(
-            "Agent Result (M1/M2/M3)",
+            "Minat menurut Jenis Call (M1, M2, M3)",
             total_agent,
-            help="Berdasarkan metadata_callResult"
         )
 
         c3.metric(
-            "Actual Potensi Minat",
+            "Minat Aktual (Hasil Rekonsiliasi Algoritma)",
             total_actual,
-            help="Rekonsiliasi AI + Agent + Keyword Override"
         )
 
     st.markdown("<hr style='margin: 25px 0 15px 0; border: 1px solid #e5e7eb;'>", unsafe_allow_html=True)
