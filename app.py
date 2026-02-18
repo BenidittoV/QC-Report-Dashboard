@@ -288,6 +288,19 @@ def tier_from_percent(p: float) -> str:
     if p >= 60: return "C"
     return "D"
 
+def safe_pct(binary_series: pd.Series) -> float:
+    if binary_series is None or len(binary_series) == 0:
+        return np.nan
+    return round(float(binary_series.mean() * 100.0), 2)
+
+def grade_badge(grade: str) -> str:
+    if grade == "S": return "🏆 S"
+    if grade == "A": return "✅ A"
+    if grade == "B": return "👍 B"
+    if grade == "C": return "⚠️ C"
+    if grade == "D": return "⛔ D"
+    return grade
+
 @st.cache_data
 def load_data(uploaded_file):
     name = uploaded_file.name.lower()
@@ -318,19 +331,6 @@ def week_ranges_sun_sat_for_month(year: int, month: int):
         ranges.append((start, end))
         cur = cur + pd.Timedelta(days=7)
     return ranges
-
-def safe_pct(binary_series: pd.Series) -> float:
-    if binary_series is None or len(binary_series) == 0:
-        return np.nan
-    return round(float(binary_series.mean() * 100.0), 2)
-
-def grade_badge(grade: str) -> str:
-    if grade == "S": return "🏆 S"
-    if grade == "A": return "✅ A"
-    if grade == "B": return "👍 B"
-    if grade == "C": return "⚠️ C"
-    if grade == "D": return "⛔ D"
-    return grade
 
 def light_table(df: pd.DataFrame):
     num_cols = df.select_dtypes(include=[np.number]).columns
@@ -397,40 +397,19 @@ def parse_metadata_datecall(series: pd.Series) -> pd.Series:
     Parse format seperti: '01 November 2025 08:23:18' (bulan Indonesia).
     Output: datetime64[ns] atau NaT jika gagal.
     """
-    if series is None:
-        return pd.to_datetime(series, errors="coerce")
-
     s = series.astype(str).str.strip()
-
     bulan = {
-        "januari": "01",
-        "februari": "02",
-        "maret": "03",
-        "april": "04",
-        "mei": "05",
-        "juni": "06",
-        "juli": "07",
-        "agustus": "08",
-        "september": "09",
-        "oktober": "10",
-        "november": "11",
-        "desember": "12",
+        "januari": "01", "februari": "02", "maret": "03", "april": "04",
+        "mei": "05", "juni": "06", "juli": "07", "agustus": "08",
+        "september": "09", "oktober": "10", "november": "11", "desember": "12",
     }
-
     s_low = s.str.lower()
-
     for nama, mm in bulan.items():
         s_low = s_low.str.replace(fr"\b{nama}\b", mm, regex=True)
-
-    # "01 11 2025 08:23:18" -> "01-11-2025 08:23:18"
     s_low = s_low.str.replace(r"^(\d{1,2})\s+(\d{2})\s+(\d{4})\s+", r"\1-\2-\3 ", regex=True)
-
     return pd.to_datetime(s_low, format="%d-%m-%Y %H:%M:%S", errors="coerce")
 
 def run_performance_block(df_base: pd.DataFrame, header_badges_html: str, title_context: str):
-    """
-    df_base: data yang SUDAH ter-filter (agent mode: TL+Agent, TL mode: TL)
-    """
     df_base = filter_call_types(df_base)
     if df_base.empty:
         st.warning("Tidak ada data setelah filter call type.")
@@ -438,11 +417,10 @@ def run_performance_block(df_base: pd.DataFrame, header_badges_html: str, title_
 
     df_base = ensure_date(df_base)
 
-    # month selector
     df_base["_month"] = df_base[DATE_COL].dt.to_period("M").astype(str)
     month_list = sorted(df_base["_month"].unique().tolist())
     with st.sidebar:
-        selected_month = st.selectbox("Bulan dan Tahun yang terdeteksi: ", month_list, index=len(month_list) - 1, key="month_picker")
+        selected_month = st.selectbox("Bulan dan Tahun yang terdeteksi: ", month_list, index=len(month_list) - 1)
 
     dfm = df_base[df_base["_month"] == selected_month].copy()
     if dfm.empty:
@@ -459,18 +437,15 @@ def run_performance_block(df_base: pd.DataFrame, header_badges_html: str, title_
     yy, mm = int(yy), int(mm)
     week_ranges = week_ranges_sun_sat_for_month(yy, mm)
 
-    # calculate result table
     rows = []
     for col in aspect_cols:
         row = {"Aspek": ASPECT_FRIENDLY_NAMES.get(col, col)}
-
         for i, (ws, we) in enumerate(week_ranges, start=1):
             mask = (dfm[DATE_COL] >= ws) & (dfm[DATE_COL] <= we)
             df_w = dfm.loc[mask]
             vals_w = df_w[col].apply(normalize_to_binary)
             pct_w = safe_pct(vals_w)
             row[f"Minggu {i} (%)"] = pct_w if not np.isnan(pct_w) else np.nan
-
         vals_m = dfm[col].apply(normalize_to_binary)
         pct_m = safe_pct(vals_m)
         row["Persentase Bulanan (%)"] = pct_m if not np.isnan(pct_m) else np.nan
@@ -480,7 +455,6 @@ def run_performance_block(df_base: pd.DataFrame, header_badges_html: str, title_
     result_df = pd.DataFrame(rows).sort_values(by="Persentase Bulanan (%)", ascending=True)
     overall_monthly = round(float(pd.to_numeric(result_df["Persentase Bulanan (%)"], errors="coerce").mean()), 2)
 
-    # KPI + context
     left, right = st.columns([1.4, 1.0], vertical_alignment="center")
     with left:
         st.markdown(
@@ -497,7 +471,6 @@ def run_performance_block(df_base: pd.DataFrame, header_badges_html: str, title_
         c3.markdown(f'<div class="card"><h4>Aspek Dihitung</h4><p class="big">{len(aspect_cols)}</p></div>', unsafe_allow_html=True)
 
     st.write("")
-
     if missing_aspects:
         with st.expander("ℹ️ Beberapa kolom aspek tidak ditemukan (aman, hanya di-skip)"):
             st.write(missing_aspects)
@@ -506,43 +479,16 @@ def run_performance_block(df_base: pd.DataFrame, header_badges_html: str, title_
 
     with tab1:
         st.subheader("Ringkasan Performa Bulanan per Aspek")
-        st.caption("Diurutkan dari yang terlemah ke terkuat (bulanan).")
-
         show_df = result_df.copy()
         show_df["Grade"] = show_df["Grade"].apply(grade_badge)
-
         pct_cols = [c for c in show_df.columns if "(%)" in c]
         show_df_display = show_df.copy()
         for c in pct_cols:
-            show_df_display[c] = show_df_display[c].apply(
-                lambda x: "Tidak ada rekaman" if pd.isna(x) else f"{x:.2f}%"
-            )
-
+            show_df_display[c] = show_df_display[c].apply(lambda x: "Tidak ada rekaman" if pd.isna(x) else f"{x:.2f}%")
         st.dataframe(light_table(show_df_display), use_container_width=True, hide_index=True)
-
-        colL, colR = st.columns(2)
-        with colL:
-            st.markdown("### Top 5 Aspek Terlemah")
-            st.dataframe(
-                light_table(show_df_display.head(5)[["Aspek", "Persentase Bulanan (%)", "Grade"]]),
-                use_container_width=True,
-                hide_index=True
-            )
-        with colR:
-            st.markdown("### Top 5 Aspek Terkuat")
-            st.dataframe(
-                light_table(
-                    show_df_display.sort_values(by="Persentase Bulanan (%)", ascending=False)
-                    .head(5)[["Aspek", "Persentase Bulanan (%)", "Grade"]]
-                ),
-                use_container_width=True,
-                hide_index=True
-            )
 
     with tab2:
         st.subheader("Trend Overall per Minggu")
-        st.caption("Overall mingguan = rata-rata semua aspek per minggu (Sun–Sat, dipotong dalam bulan).")
-
         weekly = []
         for i, (ws, we) in enumerate(week_ranges, start=1):
             vals = []
@@ -551,41 +497,16 @@ def run_performance_block(df_base: pd.DataFrame, header_badges_html: str, title_
                 if not df_w.empty:
                     vals.append(safe_pct(df_w[c].apply(normalize_to_binary)))
             weekly.append({"Minggu": f"M{i}", "Overall": round(float(np.nanmean(vals)), 2)})
-
         chart_df = pd.DataFrame(weekly)
-
-        chart = (
-            alt.Chart(chart_df)
-            .mark_line(point=True)
-            .encode(
-                x=alt.X("Minggu:N", title="Minggu"),
-                y=alt.Y("Overall:Q", title="Overall (%)")
-            )
-            .properties(height=340, background="white")
-            .configure_view(stroke=None, fill="white")
-            .configure_axis(
-                labelColor="black",
-                titleColor="black",
-                gridColor="#e5e7eb"
-            )
-            .configure_title(color="black")
-        )
-
+        chart = alt.Chart(chart_df).mark_line(point=True).encode(
+            x=alt.X("Minggu:N", title="Minggu"),
+            y=alt.Y("Overall:Q", title="Overall (%)")
+        ).properties(height=340, background="white")
         st.altair_chart(chart, use_container_width=True)
-
-        with st.expander("Range minggu (Sun–Sat) untuk bulan terpilih"):
-            tmp = []
-            for i, (ws, we) in enumerate(week_ranges, start=1):
-                tmp.append({
-                    "Minggu": f"M{i}",
-                    "Dari": ws.strftime("%Y-%m-%d"),
-                    "Sampai": we.strftime("%Y-%m-%d")
-                })
-            st.dataframe(light_table(pd.DataFrame(tmp)), use_container_width=True, hide_index=True)
 
     with tab_hour:
         st.subheader("Performa Overall per Jam (08:00–17:00)")
-        st.caption("Dihitung dari metadata_dateCall. Overall per jam = rata-rata semua aspek pada jam tersebut.")
+        st.caption("Overall per jam = rata-rata semua aspek pada jam tersebut. Dihitung dari metadata_dateCall.")
 
         if DATETIME_COL not in dfm.columns:
             st.warning(f"Kolom `{DATETIME_COL}` tidak ditemukan. Hourly Trend tidak bisa dihitung.")
@@ -598,8 +519,7 @@ def run_performance_block(df_base: pd.DataFrame, header_badges_html: str, title_
                 st.warning("Semua metadata_dateCall gagal diparse. Pastikan format seperti: 01 November 2025 08:23:18")
             else:
                 dfh["_hour"] = dfh["_dt_call"].dt.hour
-
-                hours = list(range(8, 18))  # 08..17
+                hours = list(range(8, 18))
                 hourly_rows = []
 
                 for h in hours:
@@ -607,55 +527,78 @@ def run_performance_block(df_base: pd.DataFrame, header_badges_html: str, title_
                     if d.empty:
                         hourly_rows.append({"Jam": f"{h:02d}:00", "Overall": np.nan, "Jumlah Rekaman": 0, "Hour": h})
                         continue
-
-                    vals = []
-                    for c in aspect_cols:
-                        vals.append(safe_pct(d[c].apply(normalize_to_binary)))
+                    vals = [safe_pct(d[c].apply(normalize_to_binary)) for c in aspect_cols]
                     overall_h = round(float(np.nanmean(vals)), 2)
-
-                    hourly_rows.append({
-                        "Jam": f"{h:02d}:00",
-                        "Overall": overall_h,
-                        "Jumlah Rekaman": len(d),
-                        "Hour": h
-                    })
+                    hourly_rows.append({"Jam": f"{h:02d}:00", "Overall": overall_h, "Jumlah Rekaman": len(d), "Hour": h})
 
                 hour_df = pd.DataFrame(hourly_rows).sort_values("Hour")
+                df_kpi = hour_df.dropna(subset=["Overall"]).copy()
+                total_calls_workhour = int(hour_df["Jumlah Rekaman"].sum())
+                best = df_kpi.loc[df_kpi["Overall"].idxmax()] if not df_kpi.empty else None
+                worst = df_kpi.loc[df_kpi["Overall"].idxmin()] if not df_kpi.empty else None
+                avg_overall = float(df_kpi["Overall"].mean()) if not df_kpi.empty else np.nan
 
-                chart = (
-                    alt.Chart(hour_df)
-                    .mark_line(point=True)
-                    .encode(
-                        x=alt.X("Jam:N", sort=[f"{h:02d}:00" for h in hours], title="Jam"),
-                        y=alt.Y("Overall:Q", title="Overall (%)"),
-                        tooltip=["Jam:N", "Overall:Q", "Jumlah Rekaman:Q"]
-                    )
-                    .properties(height=340, background="white")
-                    .configure_view(stroke=None, fill="white")
-                    .configure_axis(
-                        labelColor="black",
-                        titleColor="black",
-                        gridColor="#e5e7eb"
-                    )
-                    .configure_title(color="black")
+                k1, k2, k3 = st.columns(3)
+                if best is not None:
+                    k1.markdown(f'<div class="card"><h4>Best Hour</h4><p class="big">{best["Jam"]} • {best["Overall"]:.2f}%</p></div>', unsafe_allow_html=True)
+                    k2.markdown(f'<div class="card"><h4>Worst Hour</h4><p class="big">{worst["Jam"]} • {worst["Overall"]:.2f}%</p></div>', unsafe_allow_html=True)
+                else:
+                    k1.markdown('<div class="card"><h4>Best Hour</h4><p class="big">-</p></div>', unsafe_allow_html=True)
+                    k2.markdown('<div class="card"><h4>Worst Hour</h4><p class="big">-</p></div>', unsafe_allow_html=True)
+                k3.markdown(f'<div class="card"><h4>Total Rekaman (08–17)</h4><p class="big">{total_calls_workhour}</p></div>', unsafe_allow_html=True)
+                st.write("")
+
+                base = alt.Chart(hour_df).encode(
+                    x=alt.X("Jam:N", sort=[f"{h:02d}:00" for h in hours], title="Jam", axis=alt.Axis(labelAngle=0))
                 )
 
-                st.altair_chart(chart, use_container_width=True)
+                area = base.mark_area(opacity=0.18).encode(y=alt.Y("Overall:Q", title="Overall (%)"))
+                line = base.mark_line(point=alt.OverlayMarkDef(size=80), strokeWidth=4).encode(
+                    y=alt.Y("Overall:Q", title="Overall (%)"),
+                    tooltip=[
+                        alt.Tooltip("Jam:N", title="Jam"),
+                        alt.Tooltip("Overall:Q", title="Overall (%)", format=".2f"),
+                        alt.Tooltip("Jumlah Rekaman:Q", title="Jumlah Rekaman"),
+                    ],
+                )
+
+                if not np.isnan(avg_overall):
+                    rule = alt.Chart(pd.DataFrame({"avg": [avg_overall]})).mark_rule(strokeDash=[6, 6]).encode(y="avg:Q")
+                    label = alt.Chart(pd.DataFrame({"avg": [avg_overall], "txt": [f"Avg {avg_overall:.1f}%"]})).mark_text(
+                        align="left", dx=6, dy=-6
+                    ).encode(y="avg:Q", text="txt:N")
+                    top_chart = area + line + rule + label
+                else:
+                    top_chart = area + line
+
+                top_chart = top_chart.properties(height=320, background="white").configure_view(stroke=None, fill="white").configure_axis(
+                    labelColor="black", titleColor="black", gridColor="#e5e7eb"
+                )
+                st.altair_chart(top_chart, use_container_width=True)
+
+                st.write("")
+                st.caption("Volume Rekaman per Jam")
+                bar = alt.Chart(hour_df).mark_bar().encode(
+                    x=alt.X("Jam:N", sort=[f"{h:02d}:00" for h in hours], title="Jam"),
+                    y=alt.Y("Jumlah Rekaman:Q", title="Jumlah Rekaman"),
+                    tooltip=[alt.Tooltip("Jam:N", title="Jam"), alt.Tooltip("Jumlah Rekaman:Q", title="Jumlah Rekaman")],
+                ).properties(height=160, background="white").configure_view(stroke=None, fill="white").configure_axis(
+                    labelColor="black", titleColor="black", gridColor="#e5e7eb"
+                )
+                st.altair_chart(bar, use_container_width=True)
 
                 with st.expander("Detail angka per jam"):
-                    show_hour = hour_df[["Jam", "Overall", "Jumlah Rekaman"]].copy()
-                    st.dataframe(light_table(show_hour), use_container_width=True, hide_index=True)
+                    st.dataframe(light_table(hour_df[["Jam", "Overall", "Jumlah Rekaman"]]), use_container_width=True, hide_index=True)
 
     with tab3:
         st.subheader("Detail Data untuk Scoring")
-        st.caption("Contoh baris data bulan terpilih (setelah filter).")
         st.dataframe(light_table(dfm.head(50)), use_container_width=True)
 
 # =========================
-# SIDEBAR: UPLOAD + FILTER + LOGO
+# SIDEBAR: UPLOAD + LOGO
 # =========================
 with st.sidebar:
-    st.markdown("### Input Data")
+    st.markdown("### 🎛️ Filter & Data")
     uploaded = st.file_uploader("Upload file QC (CSV/XLSX)", type=["csv", "xlsx", "xls"])
 
 st.sidebar.markdown(
@@ -676,7 +619,7 @@ st.markdown(
     <div class="hero">
       <p class="hero-title">QC Audio Dashboard</p>
       <div class="hero-sub">
-        Monitoring performa Mitra (Agent) dan Team Leader (TL) per minggu (Sun–Sat), per jam (08–17), dan ringkasan bulanan per aspek.
+        Monitoring performa Mitra (Agent) dan Team Leader (TL) per minggu, per jam (08–17), dan ringkasan bulanan per aspek.
       </div>
     </div>
     """,
@@ -701,23 +644,15 @@ if missing:
 
 df_clean = normalize_identity_cols(df)
 
-# =========================
-# MODE SWITCH: Agent vs TL (radio)
-# =========================
 with st.sidebar:
     st.markdown("### Kategori Penilaian")
-    mode = st.radio(
-        "Pilih yang dinilai:",
-        ["Agent", "TL"],
-        horizontal=True,
-        key="mode_penilaian"
-    )
+    mode = st.radio("Pilih yang dinilai:", ["Agent", "TL"], horizontal=True, key="mode_penilaian")
 
 tl_list = sorted(df_clean[TL_COL].unique().tolist())
 
 if mode == "Agent":
     with st.sidebar:
-        st.markdown("### Penilaian Agent")
+        st.markdown("### 👤 Penilaian Agent")
         selected_tl = st.selectbox("Pilih Team Leader (TL)", tl_list, key="tl_agent")
 
     agent_list = sorted(df_clean.loc[df_clean[TL_COL] == selected_tl, AGENT_COL].unique().tolist())
@@ -737,15 +672,11 @@ if mode == "Agent":
 <span class="badge">TL: <b>{selected_tl}</b></span>
 &nbsp; <span class="badge">Mitra: <b>{selected_agent}</b></span>
 """
-    run_performance_block(
-        df_base=df_sel,
-        header_badges_html=header_badges,
-        title_context="Mitra yang terpilih:"
-    )
+    run_performance_block(df_base=df_sel, header_badges_html=header_badges, title_context="Mitra yang terpilih:")
 
 else:
     with st.sidebar:
-        st.markdown("### Penilaian TL")
+        st.markdown("### 👥 Penilaian TL")
         selected_tl = st.selectbox("Pilih Team Leader (TL)", tl_list, key="tl_only")
 
     df_sel = df.copy()
@@ -765,11 +696,7 @@ else:
 <span class="badge">TL: <b>{selected_tl}</b></span>
 &nbsp; <span class="badge">Total Agent: <b>{agent_count}</b></span>
 """
-    run_performance_block(
-        df_base=df_sel,
-        header_badges_html=header_badges,
-        title_context="Team Leader yang dipilih:"
-    )
+    run_performance_block(df_base=df_sel, header_badges_html=header_badges, title_context="Team Leader yang dipilih:")
 
 st.write("")
 st.caption("© QC Audio Dashboard")
