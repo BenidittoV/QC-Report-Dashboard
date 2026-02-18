@@ -479,79 +479,164 @@ def run_performance_block(df_base: pd.DataFrame, header_badges_html: str, title_
 
     with tab1:
         st.subheader("Ringkasan Performa Bulanan per Aspek")
+        st.caption("Diurutkan dari yang terlemah ke terkuat (bulanan).")
+
         show_df = result_df.copy()
         show_df["Grade"] = show_df["Grade"].apply(grade_badge)
+
         pct_cols = [c for c in show_df.columns if "(%)" in c]
         show_df_display = show_df.copy()
         for c in pct_cols:
-            show_df_display[c] = show_df_display[c].apply(lambda x: "Tidak ada rekaman" if pd.isna(x) else f"{x:.2f}%")
+            show_df_display[c] = show_df_display[c].apply(
+                lambda x: "Tidak ada rekaman" if pd.isna(x) else f"{x:.2f}%"
+            )
+
         st.dataframe(light_table(show_df_display), use_container_width=True, hide_index=True)
+
+        colL, colR = st.columns(2)
+        with colL:
+            st.markdown("### Top 5 Aspek Terlemah")
+            st.dataframe(
+                light_table(show_df_display.head(5)[["Aspek", "Persentase Bulanan (%)", "Grade"]]),
+                use_container_width=True,
+                hide_index=True
+            )
+        with colR:
+            st.markdown("### Top 5 Aspek Terkuat")
+            st.dataframe(
+                light_table(
+                    show_df_display.sort_values(by="Persentase Bulanan (%)", ascending=False)
+                    .head(5)[["Aspek", "Persentase Bulanan (%)", "Grade"]]
+                ),
+                use_container_width=True,
+                hide_index=True
+            )
+
 
     with tab2:
         st.subheader("Trend Overall per Minggu")
 
-    weekly = []
-    for i, (ws, we) in enumerate(week_ranges, start=1):
-        vals = []
-        df_w = dfm[(dfm[DATE_COL] >= ws) & (dfm[DATE_COL] <= we)]
-        for c in aspect_cols:
-            if not df_w.empty:
-                vals.append(safe_pct(df_w[c].apply(normalize_to_binary)))
-        weekly.append({
-            "Minggu": f"M{i}",
-            "Overall": round(float(np.nanmean(vals)), 2)
-        })
+        weekly = []
+        for i, (ws, we) in enumerate(week_ranges, start=1):
+            vals = []
+            df_w = dfm[(dfm[DATE_COL] >= ws) & (dfm[DATE_COL] <= we)]
+            for c in aspect_cols:
+                if not df_w.empty:
+                    vals.append(safe_pct(df_w[c].apply(normalize_to_binary)))
 
-    chart_df = pd.DataFrame(weekly)
+            weekly.append({
+                "Minggu": f"M{i}",
+                "Overall": round(float(np.nanmean(vals)), 2),
+                "Jumlah Rekaman": len(df_w)
+            })
 
-    base = alt.Chart(chart_df).encode(
-        x=alt.X(
-            "Minggu:N",
-            title="Minggu",
-            axis=alt.Axis(
-                labelAngle=0,
-                labelColor="black",
-                titleColor="black"
+        chart_df = pd.DataFrame(weekly)
+
+        # =========================
+        # KPI SUMMARY
+        # =========================
+        df_kpi = chart_df.dropna(subset=["Overall"]).copy()
+
+        total_records = int(chart_df["Jumlah Rekaman"].sum())
+        avg_weekly = float(df_kpi["Overall"].mean()) if not df_kpi.empty else np.nan
+        best = df_kpi.loc[df_kpi["Overall"].idxmax()] if not df_kpi.empty else None
+        worst = df_kpi.loc[df_kpi["Overall"].idxmin()] if not df_kpi.empty else None
+
+        k1, k2, k3= st.columns(3)
+
+        if best is not None:
+            k1.markdown(
+                f'<div class="card"><h4>🏆 Best Week</h4><p class="big">{best["Minggu"]} • {best["Overall"]:.2f}%</p></div>',
+                unsafe_allow_html=True
             )
-        ),
-        y=alt.Y(
-            "Overall:Q",
-            title="Overall (%)",
-            axis=alt.Axis(
-                labelColor="black",
-                titleColor="black",
-                gridColor="#e5e7eb"
+            k2.markdown(
+                f'<div class="card"><h4>⚠️ Worst Week</h4><p class="big">{worst["Minggu"]} • {worst["Overall"]:.2f}%</p></div>',
+                unsafe_allow_html=True
+            )
+            k3.markdown(
+                f'<div class="card"><h4>📊 Avg Weekly</h4><p class="big">{avg_weekly:.2f}%</p></div>',
+                unsafe_allow_html=True
+            )
+        else:
+            k1.markdown('<div class="card"><h4>Best Week</h4><p class="big">-</p></div>', unsafe_allow_html=True)
+            k2.markdown('<div class="card"><h4>Worst Week</h4><p class="big">-</p></div>', unsafe_allow_html=True)
+            k3.markdown('<div class="card"><h4>Avg Weekly</h4><p class="big">-</p></div>', unsafe_allow_html=True)
+
+        st.write("")
+
+        # =========================
+        # CHART
+        # =========================
+        base = alt.Chart(chart_df).encode(
+            x=alt.X(
+                "Minggu:N",
+                title="Minggu",
+                axis=alt.Axis(labelAngle=0, labelColor="black", titleColor="black")
+            ),
+            y=alt.Y(
+                "Overall:Q",
+                title="Overall (%)",
+                axis=alt.Axis(labelColor="black", titleColor="black", gridColor="#e5e7eb")
             )
         )
-    )
 
-    area = base.mark_area(
-        opacity=0.15
-    )
+        area = base.mark_area(opacity=0.15)
 
-    line = base.mark_line(
-        strokeWidth=4,
-        point=alt.OverlayMarkDef(size=90)
-    ).encode(
-        tooltip=[
-            alt.Tooltip("Minggu:N", title="Minggu"),
-            alt.Tooltip("Overall:Q", title="Overall (%)", format=".2f")
-        ]
-    )
+        line = base.mark_line(
+            strokeWidth=4,
+            point=alt.OverlayMarkDef(size=90)
+        ).encode(
+            tooltip=[
+                alt.Tooltip("Minggu:N", title="Minggu"),
+                alt.Tooltip("Overall:Q", title="Overall (%)", format=".2f"),
+                alt.Tooltip("Jumlah Rekaman:Q", title="Jumlah Rekaman")
+            ]
+        )
 
-    final_chart = (area + line).properties(
-        height=360,
-        background="white"
-    ).configure_view(
-        stroke=None,
-        fill="white"
-    ).configure_axis(
-        labelFontSize=12,
-        titleFontSize=13
-    )
+        # Average line
+        if not np.isnan(avg_weekly):
+            rule = alt.Chart(pd.DataFrame({"avg": [avg_weekly]})).mark_rule(
+                strokeDash=[6, 6]
+            ).encode(y="avg:Q")
 
-    st.altair_chart(final_chart, use_container_width=True)
+            label = alt.Chart(pd.DataFrame({
+                "avg": [avg_weekly],
+                "txt": [f"Avg {avg_weekly:.1f}%"]
+            })).mark_text(
+                align="left",
+                dx=6,
+                dy=-6
+            ).encode(
+                y="avg:Q",
+                text="txt:N"
+            )
 
+            final_chart = area + line + rule + label
+        else:
+            final_chart = area + line
+
+        final_chart = final_chart.properties(
+            height=360,
+            background="white"
+        ).configure_view(
+            stroke=None,
+            fill="white"
+        ).configure_axis(
+            labelFontSize=12,
+            titleFontSize=13
+        )
+
+        st.altair_chart(final_chart, use_container_width=True)
+
+        # =========================
+        # DETAIL TABLE
+        # =========================
+        with st.expander("Detail angka per minggu"):
+            st.dataframe(
+                light_table(chart_df[["Minggu", "Overall", "Jumlah Rekaman"]]),
+                use_container_width=True,
+                hide_index=True
+            )
 
     with tab_hour:
         st.subheader("Performa Overall per Jam (08:00–17:00)")
