@@ -20,9 +20,13 @@ AGENT_COL = "metadata_namaAgent"
 CALLRESULT_COL = "metadata_callResult"
 DATE_COL = "call_date"  # format YYYY-MM-DD
 DATETIME_COL = "metadata_dateCall"  # contoh: "01 November 2025 08:23:18"
+SENTIMENT_CATEGORY_COL = "sentiment_category"
+SENTIMENT_REASON_COL = "sentiment_reason"
+CALLRESULT_COL = "metadata_callResult"
+
 
 DEFAULT_ALLOWED_CALL_TYPES = [
-    "M1 (Setuju dikirim hitungan)", "M2 (Negosiasi)", "M3 (Setuju dengan hitungan)"
+    "M1 (Setuju dikirim hitungan)", "M2 (Negosiasi)", "M3 (Setuju dengan hitungan)", "Tidak Minat", "Warm Leads", "Pencairan Minus" 
 ]
 
 ASPECT_COLUMNS_CANDIDATES = [
@@ -175,7 +179,12 @@ section[data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"] button{
   padding: 12px;
   border: 1px solid #e5e7eb;
 }
-[data-testid="stMetric"] * { color: #000000 !important; }
+
+[data-testid="stMetricValue"] {
+  font-weight: 900 !important;
+  font-size: 28px !important;
+  color: #000000 !important;
+}
 
 button[data-baseweb="tab"] {
   background: transparent;
@@ -475,7 +484,36 @@ def run_performance_block(df_base: pd.DataFrame, header_badges_html: str, title_
         with st.expander("ℹ️ Beberapa kolom aspek tidak ditemukan (aman, hanya di-skip)"):
             st.write(missing_aspects)
 
-    tab1, tab2, tab_hour, tab3 = st.tabs(["📊 Overview", "📈 Weekly Trend", "⏰ Hourly Trend", "🧾 Data & Detail"])
+    sentiment_cards = calculate_three_sentiment_cards(dfm)
+
+    actual_df = None
+
+    if sentiment_cards:
+        total_ai, total_agent, total_actual, actual_mask = sentiment_cards
+        actual_df = dfm[actual_mask].copy()
+
+        c1, c2, c3 = st.columns(3)
+
+        c1.metric(
+            "AI Interest",
+            total_ai,
+            help="Berdasarkan sentiment_category (Potensi / Ragu-ragu)"
+        )
+
+        c2.metric(
+            "Agent Result (M1/M2/M3)",
+            total_agent,
+            help="Berdasarkan metadata_callResult"
+        )
+
+        c3.metric(
+            "Actual Potensi Minat",
+            total_actual,
+            help="Rekonsiliasi AI + Agent + Keyword Override"
+        )
+
+    st.markdown("<hr style='margin: 25px 0 15px 0; border: 1px solid #e5e7eb;'>", unsafe_allow_html=True)
+    tab1, tab2, tab_hour, tab3 = st.tabs(["Overview", "Weekly Trend", "Hourly Trend", "Data & Detail"])
 
     with tab1:
         st.subheader("Ringkasan Performa Bulanan per Aspek")
@@ -512,7 +550,6 @@ def run_performance_block(df_base: pd.DataFrame, header_badges_html: str, title_
                 hide_index=True
             )
 
-
     with tab2:
         st.subheader("Trend Overall per Minggu")
 
@@ -546,15 +583,15 @@ def run_performance_block(df_base: pd.DataFrame, header_badges_html: str, title_
 
         if best is not None:
             k1.markdown(
-                f'<div class="card"><h4>🏆 Best Week</h4><p class="big">{best["Minggu"]} • {best["Overall"]:.2f}%</p></div>',
+                f'<div class="card"><h4>Best Week</h4><p class="big">{best["Minggu"]} • {best["Overall"]:.2f}%</p></div>',
                 unsafe_allow_html=True
             )
             k2.markdown(
-                f'<div class="card"><h4>⚠️ Worst Week</h4><p class="big">{worst["Minggu"]} • {worst["Overall"]:.2f}%</p></div>',
+                f'<div class="card"><h4>Worst Week</h4><p class="big">{worst["Minggu"]} • {worst["Overall"]:.2f}%</p></div>',
                 unsafe_allow_html=True
             )
             k3.markdown(
-                f'<div class="card"><h4>📊 Avg Weekly</h4><p class="big">{avg_weekly:.2f}%</p></div>',
+                f'<div class="card"><h4>Avg Weekly</h4><p class="big">{avg_weekly:.2f}%</p></div>',
                 unsafe_allow_html=True
             )
         else:
@@ -631,12 +668,43 @@ def run_performance_block(df_base: pd.DataFrame, header_badges_html: str, title_
         # =========================
         # DETAIL TABLE
         # =========================
+        # =========================
+        # VOLUME REKAMAN PER MINGGU
+        # =========================
+        st.write("")
+        st.caption("Volume Rekaman per Minggu")
+
+        bar_week = alt.Chart(chart_df).mark_bar().encode(
+            x=alt.X("Minggu:N", title="Minggu"),
+            y=alt.Y("Jumlah Rekaman:Q", title="Jumlah Rekaman"),
+            tooltip=[
+                alt.Tooltip("Minggu:N", title="Minggu"),
+                alt.Tooltip("Jumlah Rekaman:Q", title="Jumlah Rekaman")
+            ],
+        ).properties(
+            height=160,
+            background="white"
+        ).configure_view(
+            stroke=None,
+            fill="white"
+        ).configure_axis(
+            labelColor="black",
+            titleColor="black",
+            gridColor="#e5e7eb"
+        )
+
+        st.altair_chart(bar_week, use_container_width=True)
+
+        # =========================
+        # DETAIL TABLE
+        # =========================
         with st.expander("Detail angka per minggu"):
             st.dataframe(
                 light_table(chart_df[["Minggu", "Overall", "Jumlah Rekaman"]]),
                 use_container_width=True,
                 hide_index=True
             )
+
 
     with tab_hour:
         st.subheader("Performa Overall per Jam (08:00–17:00)")
@@ -725,8 +793,188 @@ def run_performance_block(df_base: pd.DataFrame, header_badges_html: str, title_
                     st.dataframe(light_table(hour_df[["Jam", "Overall", "Jumlah Rekaman"]]), use_container_width=True, hide_index=True)
 
     with tab3:
+        # =========================
+        # ACTUAL POTENSI MINAT DATA
+        # =========================
+        if actual_df is not None and not actual_df.empty:
+
+            st.subheader("🎯 Data Actual Potensi Minat (Reconciled)")
+            st.caption("Data yang masuk ke perhitungan Actual Potensi Minat.")
+
+            st.dataframe(
+                light_table(actual_df),
+                use_container_width=True,
+                hide_index=True
+            )
+
+            st.markdown("<hr style='margin: 25px 0 15px 0; border: 1px solid #e5e7eb;'>", unsafe_allow_html=True)
+
+        # =========================
+        # DETAIL DATA SCORING
+        # =========================
         st.subheader("Detail Data untuk Scoring")
-        st.dataframe(light_table(dfm.head(50)), use_container_width=True)
+        st.dataframe(
+            light_table(dfm.head(50)),
+            use_container_width=True,
+            hide_index=True
+        )
+
+
+    if SENTIMENT_CATEGORY_COL not in df.columns or SENTIMENT_REASON_COL not in df.columns:
+        return None
+
+    dfx = df.copy()
+
+    # Normalisasi
+    dfx[SENTIMENT_CATEGORY_COL] = (
+        dfx[SENTIMENT_CATEGORY_COL]
+        .astype(str)
+        .str.strip()
+        .str.lower()
+    )
+
+    dfx[SENTIMENT_REASON_COL] = (
+        dfx[SENTIMENT_REASON_COL]
+        .astype(str)
+        .str.lower()
+    )
+
+    # =========================
+    # CARD 1 (Excel)
+    # =========================
+    total_excel = dfx[
+        dfx[SENTIMENT_CATEGORY_COL].isin(["potensi berminat", "ragu-ragu"])
+    ].shape[0]
+
+    # =========================
+    # FILTER TIDAK BERMINAT
+    # =========================
+    df_tidak = dfx[
+        dfx[SENTIMENT_CATEGORY_COL] == "tidak berminat"
+    ]
+
+    # =========================
+    # KEYWORD DETECTION
+    # =========================
+    keywords = [
+        "pikir-pikir",
+        "pikir pikir",
+        "pikir",
+        "pertimbangkan",
+        "diskusi"
+    ]
+
+    pattern = "|".join(keywords)
+
+    tambahan_dari_tidak = df_tidak[
+        df_tidak[SENTIMENT_REASON_COL].str.contains(pattern, na=False)
+    ].shape[0]
+
+    # =========================
+    # CARD 2 (Adjusted)
+    # =========================
+    total_adjusted = total_excel + tambahan_dari_tidak
+
+    return total_excel, total_adjusted
+
+def calculate_three_sentiment_cards(df: pd.DataFrame):
+
+    required_cols = [
+        SENTIMENT_CATEGORY_COL,
+        SENTIMENT_REASON_COL,
+        CALLRESULT_COL
+    ]
+
+    if not all(col in df.columns for col in required_cols):
+        return None
+
+    dfx = df.copy()
+
+    # =========================
+    # NORMALISASI
+    # =========================
+    dfx[SENTIMENT_CATEGORY_COL] = (
+        dfx[SENTIMENT_CATEGORY_COL]
+        .astype(str)
+        .str.strip()
+        .str.lower()
+    )
+
+    dfx[SENTIMENT_REASON_COL] = (
+        dfx[SENTIMENT_REASON_COL]
+        .astype(str)
+        .str.lower()
+    )
+
+    dfx[CALLRESULT_COL] = (
+        dfx[CALLRESULT_COL]
+        .astype(str)
+        .str.lower()
+    )
+
+    # =========================
+    # CARD 1 → AI SENTIMENT
+    # =========================
+    mask_ai = dfx[SENTIMENT_CATEGORY_COL].isin(
+        ["potensi berminat", "ragu-ragu"]
+    )
+
+    total_ai = mask_ai.sum()
+
+    # =========================
+    # CARD 2 → AGENT RESULT
+    # =========================
+    mask_agent = dfx[CALLRESULT_COL].str.contains(
+        r"\bm1\b|\bm2\b|\bm3\b",
+        na=False
+    )
+
+    total_agent = mask_agent.sum()
+
+    # =========================
+    # RULE 1
+    # Agent M1/M2/M3 tapi AI Tidak Berminat
+    # =========================
+    rule1 = mask_agent & (dfx[SENTIMENT_CATEGORY_COL] == "tidak berminat")
+
+    # =========================
+    # RULE 2
+    # Agent Tidak Minat tapi AI Potensi/Ragu
+    # =========================
+    mask_call_tidak = ~mask_agent
+    rule2 = mask_call_tidak & mask_ai
+
+    # =========================
+    # RULE 3
+    # Dua-duanya Tidak Berminat
+    # tapi ada keyword
+    # =========================
+    keywords = [
+        "pikir-pikir",
+        "pikir pikir",
+        "pikir",
+        "pertimbangkan",
+        "diskusi",
+        "diskusikan"
+    ]
+
+    pattern = "|".join(keywords)
+
+    rule3 = (
+        (~mask_agent) &
+        (dfx[SENTIMENT_CATEGORY_COL] == "tidak berminat") &
+        (dfx[SENTIMENT_REASON_COL].str.contains(pattern, na=False))
+    )
+
+    # =========================
+    # ACTUAL POTENSI (UNION SEMUA)
+    # =========================
+    actual_mask = mask_ai | mask_agent | rule3
+
+    total_actual = actual_mask.sum()
+
+    return total_ai, total_agent, total_actual, actual_mask
+
 
 # =========================
 # SIDEBAR: UPLOAD + LOGO
