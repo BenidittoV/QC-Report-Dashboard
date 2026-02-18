@@ -489,20 +489,69 @@ def run_performance_block(df_base: pd.DataFrame, header_badges_html: str, title_
 
     with tab2:
         st.subheader("Trend Overall per Minggu")
-        weekly = []
-        for i, (ws, we) in enumerate(week_ranges, start=1):
-            vals = []
-            df_w = dfm[(dfm[DATE_COL] >= ws) & (dfm[DATE_COL] <= we)]
-            for c in aspect_cols:
-                if not df_w.empty:
-                    vals.append(safe_pct(df_w[c].apply(normalize_to_binary)))
-            weekly.append({"Minggu": f"M{i}", "Overall": round(float(np.nanmean(vals)), 2)})
-        chart_df = pd.DataFrame(weekly)
-        chart = alt.Chart(chart_df).mark_line(point=True).encode(
-            x=alt.X("Minggu:N", title="Minggu"),
-            y=alt.Y("Overall:Q", title="Overall (%)")
-        ).properties(height=340, background="white")
-        st.altair_chart(chart, use_container_width=True)
+
+    weekly = []
+    for i, (ws, we) in enumerate(week_ranges, start=1):
+        vals = []
+        df_w = dfm[(dfm[DATE_COL] >= ws) & (dfm[DATE_COL] <= we)]
+        for c in aspect_cols:
+            if not df_w.empty:
+                vals.append(safe_pct(df_w[c].apply(normalize_to_binary)))
+        weekly.append({
+            "Minggu": f"M{i}",
+            "Overall": round(float(np.nanmean(vals)), 2)
+        })
+
+    chart_df = pd.DataFrame(weekly)
+
+    base = alt.Chart(chart_df).encode(
+        x=alt.X(
+            "Minggu:N",
+            title="Minggu",
+            axis=alt.Axis(
+                labelAngle=0,
+                labelColor="black",
+                titleColor="black"
+            )
+        ),
+        y=alt.Y(
+            "Overall:Q",
+            title="Overall (%)",
+            axis=alt.Axis(
+                labelColor="black",
+                titleColor="black",
+                gridColor="#e5e7eb"
+            )
+        )
+    )
+
+    area = base.mark_area(
+        opacity=0.15
+    )
+
+    line = base.mark_line(
+        strokeWidth=4,
+        point=alt.OverlayMarkDef(size=90)
+    ).encode(
+        tooltip=[
+            alt.Tooltip("Minggu:N", title="Minggu"),
+            alt.Tooltip("Overall:Q", title="Overall (%)", format=".2f")
+        ]
+    )
+
+    final_chart = (area + line).properties(
+        height=360,
+        background="white"
+    ).configure_view(
+        stroke=None,
+        fill="white"
+    ).configure_axis(
+        labelFontSize=12,
+        titleFontSize=13
+    )
+
+    st.altair_chart(final_chart, use_container_width=True)
+
 
     with tab_hour:
         st.subheader("Performa Overall per Jam (08:00–17:00)")
