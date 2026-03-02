@@ -286,7 +286,7 @@ section[data-testid="stSidebar"] div[data-testid="stRadio"] div[role="radiogroup
   height: 100vh;
   background: rgba(255,255,255,0.92);
   z-index: 999999;
-  display: none; /* default hidden */
+  display: none;
   align-items: center;
   justify-content: center;
 }}
@@ -304,44 +304,43 @@ section[data-testid="stSidebar"] div[data-testid="stRadio"] div[role="radiogroup
 }}
 
 #loading-overlay img.loading-logo {{
-  width: 175px;
-  height: 175px;
+  width: 170px;
+  height: 170px;
   border-radius: 999px;
 
   transform-origin: 50% 50%;
   will-change: transform;
-
   filter: drop-shadow(0 18px 36px rgba(0,0,0,0.16));
 
-  /* dibuat kalem & jelas terlihat */
-  animation: qcPulseSpin 2.80s infinite;
+  /* speed tengah2 (antara 1.50s dan 2.80s) */
+  animation: qcPulseSpin 2.10s infinite;
 }}
 
 /*
-Timeline (2.80s):
-0–10%  (0.28s): shrink pelan
-10–45% (0.98s): percepatan
-45–75% (0.84s): perlambatan
-75–85% (0.28s): pop bigger
-85–100%(0.42s): tahan & settle
+Timeline (2.10s):
+0–10%  (0.21s): shrink pelan
+10–45% (0.735s): percepatan
+45–75% (0.63s): perlambatan
+75–85% (0.21s): pop bigger
+85–100%(0.315s): tahan & settle
 */
 @keyframes qcPulseSpin {{
   0%   {{ transform: scale(1.00) rotate(0deg); }}
 
-  /* shrink pelan */
-  10%  {{ transform: scale(0.90) rotate(8deg); }}
+  /* shrink */
+  10%  {{ transform: scale(0.89) rotate(8deg); }}
 
-  /* accel: kenaikan derajat makin besar tapi kalem */
-  20%  {{ transform: scale(0.90) rotate(45deg); }}
-  32%  {{ transform: scale(0.90) rotate(135deg); }}
-  45%  {{ transform: scale(0.90) rotate(300deg); }}
+  /* accel (kenaikan derajat makin besar) */
+  20%  {{ transform: scale(0.89) rotate(60deg); }}
+  32%  {{ transform: scale(0.89) rotate(170deg); }}
+  45%  {{ transform: scale(0.89) rotate(320deg); }}
 
-  /* decel: kenaikan derajat makin kecil sampai berhenti */
-  60%  {{ transform: scale(0.90) rotate(345deg); }}
-  75%  {{ transform: scale(0.90) rotate(360deg); }}
+  /* decel (kenaikan derajat makin kecil) */
+  60%  {{ transform: scale(0.89) rotate(352deg); }}
+  75%  {{ transform: scale(0.89) rotate(360deg); }}
 
-  /* pop + settle yang smooth */
-  85%  {{ transform: scale(1.06) rotate(360deg); }}
+  /* pop + settle */
+  85%  {{ transform: scale(1.07) rotate(360deg); }}
   93%  {{ transform: scale(1.02) rotate(360deg); }}
   100% {{ transform: scale(1.00) rotate(360deg); }}
 }}
