@@ -312,7 +312,7 @@ section[data-testid="stSidebar"] div[data-testid="stRadio"] div[role="radiogroup
   will-change: transform;
   filter: drop-shadow(0 18px 36px rgba(0,0,0,0.16));
 
-  /* ROTATE: shuriken flow (pelan -> cepat -> pelan) */
+  /* MUTER: pelan -> cepat -> pelan (tanpa berhenti) */
   animation: qcSpinFlow 2.10s linear infinite;
 }}
 
@@ -324,52 +324,46 @@ section[data-testid="stSidebar"] div[data-testid="stRadio"] div[role="radiogroup
   transform-origin: 50% 50%;
   will-change: transform;
 
-  /* SCALE: shrink -> pop -> settle (lebih organik) */
+  /* KECIL -> tahan -> BESAR lagi */
   animation: qcPulse 2.10s ease-in-out infinite;
 }}
 
 /* =========================
-   ROTATION: lebih "ngalir"
-   (banyak titik supaya akselerasi terasa halus)
+   ROTATE: "shuriken" flow
+   - sudut bertambah terus (multi putaran)
+   - slope kecil di awal, besar di tengah, kecil di akhir
    ========================= */
 @keyframes qcSpinFlow {{
   0%   {{ transform: rotate(0deg); }}
 
-  /* masuk pelan */
-  10%  {{ transform: rotate(8deg); }}
-  18%  {{ transform: rotate(28deg); }}
+  /* pelan (kenaikan kecil) */
+  10%  {{ transform: rotate(40deg); }}
+  20%  {{ transform: rotate(150deg); }}
 
-  /* percepat bertahap */
-  26%  {{ transform: rotate(75deg); }}
-  34%  {{ transform: rotate(150deg); }}
-  40%  {{ transform: rotate(240deg); }}
-  45%  {{ transform: rotate(320deg); }}
+  /* cepat (kenaikan besar) */
+  35%  {{ transform: rotate(520deg); }}
+  50%  {{ transform: rotate(980deg); }}
+  65%  {{ transform: rotate(1300deg); }}
 
-  /* perlambat bertahap (ngalir sampai berhenti) */
-  52%  {{ transform: rotate(346deg); }}
-  58%  {{ transform: rotate(355deg); }}
-  64%  {{ transform: rotate(358deg); }}
-  70%  {{ transform: rotate(359.3deg); }}
-  75%  {{ transform: rotate(360deg); }}
-
-  /* tahan (biar ada “breath”) */
-  100% {{ transform: rotate(360deg); }}
+  /* pelan lagi (kenaikan kecil) */
+  80%  {{ transform: rotate(1410deg); }}
+  90%  {{ transform: rotate(1460deg); }}
+  100% {{ transform: rotate(1500deg); }}
 }}
 
 /* =========================
-   SCALE: shrink -> pop -> settle
+   SCALE: kecil dulu, muter, lalu membesar lagi
    ========================= */
 @keyframes qcPulse {{
   0%   {{ transform: scale(1.00); }}
-  10%  {{ transform: scale(0.89); }}
+  12%  {{ transform: scale(0.88); }}
 
-  /* tahan kecil saat spin */
-  45%  {{ transform: scale(0.89); }}
-  75%  {{ transform: scale(0.89); }}
+  /* stay kecil saat fase spin utama */
+  70%  {{ transform: scale(0.88); }}
 
   /* membesar lagi */
-  85%  {{ transform: scale(1.07); }}
-  93%  {{ transform: scale(1.02); }}
+  84%  {{ transform: scale(1.08); }}
+  92%  {{ transform: scale(1.02); }}
   100% {{ transform: scale(1.00); }}
 }}
 
