@@ -286,7 +286,7 @@ section[data-testid="stSidebar"] div[data-testid="stRadio"] div[role="radiogroup
   height: 100vh;
   background: rgba(255,255,255,0.92);
   z-index: 999999;
-  display: none; /* default hidden */
+  display: none;
   align-items: center;
   justify-content: center;
 }}
@@ -307,44 +307,42 @@ section[data-testid="stSidebar"] div[data-testid="stRadio"] div[role="radiogroup
   width: 165px;
   height: 165px;
   border-radius: 999px;
-
   transform-origin: 50% 50%;
   will-change: transform;
-
   filter: drop-shadow(0 18px 36px rgba(0,0,0,0.16));
 
-  /* penting: linear supaya "speed curve" dikontrol oleh keyframes (nggak ada jeda) */
-  animation: qcPulseSpin 1.50s linear infinite;
+  /* linear supaya "kurva kecepatan" ditentukan oleh keyframe (tanpa jeda) */
+  animation: qcPulseSpin 1.70s linear infinite;
 }}
 
 /*
-Flow:
-- scale mengecil dulu
-- rotasi selalu naik (0 -> 1080deg) jadi "beneran muter" tanpa stop
-- speed pelan -> cepat -> pelan (terasa shuriken)
-- lalu membesar lagi
+Urutan yang jelas:
+1) 0–12%  : mengecil
+2) 12–52% : spin pelan -> cepat (tanpa stop karena rotasi naik terus)
+3) 52–78% : spin cepat -> lambat (tanpa stop)
+4) 78–100%: membesar (overshoot) lalu settle, sambil masih muter pelan
+Total rotasi: 3 putaran = 1080deg -> loop mulus
 */
 @keyframes qcPulseSpin {{
+  /* 1) mengecil */
   0%   {{ transform: scale(1.00) rotate(0deg); }}
+  6%   {{ transform: scale(0.93) rotate(12deg); }}
+  12%  {{ transform: scale(0.88) rotate(30deg); }}
 
-  /* shrink (halus) */
-  8%   {{ transform: scale(0.92) rotate(18deg); }}
-  14%  {{ transform: scale(0.88) rotate(45deg); }}
-
-  /* accel (kenaikan derajat makin besar) */
+  /* 2) pelan -> cepat (accel) */
   22%  {{ transform: scale(0.88) rotate(140deg); }}
-  30%  {{ transform: scale(0.88) rotate(320deg); }}
-  38%  {{ transform: scale(0.88) rotate(560deg); }}
-  46%  {{ transform: scale(0.88) rotate(820deg); }}
+  32%  {{ transform: scale(0.88) rotate(330deg); }}
+  42%  {{ transform: scale(0.88) rotate(600deg); }}
+  52%  {{ transform: scale(0.88) rotate(860deg); }}
 
-  /* decel (kenaikan derajat makin kecil) */
-  58%  {{ transform: scale(0.88) rotate(980deg); }}
-  70%  {{ transform: scale(0.88) rotate(1045deg); }}
-  78%  {{ transform: scale(0.88) rotate(1068deg); }}
+  /* 3) cepat -> lambat (decel) */
+  62%  {{ transform: scale(0.88) rotate(1000deg); }}
+  70%  {{ transform: scale(0.88) rotate(1050deg); }}
+  78%  {{ transform: scale(0.88) rotate(1070deg); }}
 
-  /* pop + settle sambil masih muter pelan */
-  86%  {{ transform: scale(1.08) rotate(1078deg); }}
-  93%  {{ transform: scale(1.02) rotate(1084deg); }}
+  /* 4) membesar + settle (tetap muter pelan) */
+  86%  {{ transform: scale(1.08) rotate(1086deg); }}
+  93%  {{ transform: scale(1.02) rotate(1092deg); }}
   100% {{ transform: scale(1.00) rotate(1080deg); }}
 }}
 
