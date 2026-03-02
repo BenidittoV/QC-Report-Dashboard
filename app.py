@@ -279,10 +279,6 @@ section[data-testid="stSidebar"] div[data-testid="stRadio"] div[role="radiogroup
    - auto tampil saat upload (progress UI muncul)
    - auto tampil saat python proses (processing-flag ada)
    ========================= */
-@keyframes spin {{
-  0%   {{ transform: rotate(0deg); }}
-  100% {{ transform: rotate(360deg); }}
-}}
 #loading-overlay {{
   position: fixed;
   inset: 0;
@@ -294,27 +290,67 @@ section[data-testid="stSidebar"] div[data-testid="stRadio"] div[role="radiogroup
   align-items: center;
   justify-content: center;
 }}
+
 #loading-overlay .loading-inner {{
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 12px;
-  padding: 18px 22px;
-  border-radius: 18px;
+  gap: 14px;
+  padding: 22px 28px;
+  border-radius: 20px;
   border: 1px solid #e5e7eb;
-  background: rgba(255,255,255,0.9);
-  box-shadow: 0 18px 40px rgba(0,0,0,0.10);
+  background: rgba(255,255,255,0.92);
+  box-shadow: 0 22px 54px rgba(0,0,0,0.12);
 }}
+
 #loading-overlay img.loading-logo {{
-  width: 110px;
-  height: 110px;
+  width: 175px;
+  height: 175px;
   border-radius: 999px;
-  animation: spin 1.0s linear infinite;
+
+  transform-origin: 50% 50%;
+  will-change: transform;
+
+  filter: drop-shadow(0 18px 36px rgba(0,0,0,0.16));
+
+  /* dibuat kalem & jelas terlihat */
+  animation: qcPulseSpin 2.80s infinite;
 }}
-#loading-overlay .loading-text {{
-  font-weight: 800;
-  color: #111827;
-  opacity: 0.9;
+
+/*
+Timeline (2.80s):
+0–10%  (0.28s): shrink pelan
+10–45% (0.98s): percepatan
+45–75% (0.84s): perlambatan
+75–85% (0.28s): pop bigger
+85–100%(0.42s): tahan & settle
+*/
+@keyframes qcPulseSpin {{
+  0%   {{ transform: scale(1.00) rotate(0deg); }}
+
+  /* shrink pelan */
+  10%  {{ transform: scale(0.90) rotate(8deg); }}
+
+  /* accel: kenaikan derajat makin besar tapi kalem */
+  20%  {{ transform: scale(0.90) rotate(45deg); }}
+  32%  {{ transform: scale(0.90) rotate(135deg); }}
+  45%  {{ transform: scale(0.90) rotate(300deg); }}
+
+  /* decel: kenaikan derajat makin kecil sampai berhenti */
+  60%  {{ transform: scale(0.90) rotate(345deg); }}
+  75%  {{ transform: scale(0.90) rotate(360deg); }}
+
+  /* pop + settle yang smooth */
+  85%  {{ transform: scale(1.06) rotate(360deg); }}
+  93%  {{ transform: scale(1.02) rotate(360deg); }}
+  100% {{ transform: scale(1.00) rotate(360deg); }}
+}}
+
+@media (prefers-reduced-motion: reduce) {{
+  #loading-overlay img.loading-logo {{
+    animation: none !important;
+    transform: scale(1) rotate(0);
+  }}
 }}
 
 /* Upload in-progress detectors (Streamlit DOM bisa beda versi, jadi dibuat beberapa selector) */
