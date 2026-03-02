@@ -986,7 +986,7 @@ def run_performance_block(df_base: pd.DataFrame, header_badges_html: str, title_
             st.altair_chart(style_chart(bar_vol, height=160), use_container_width=True)
 
             st.write("")
-            st.subheader("Jam Rawan Minat (Warm Leads / M1–M3)")
+            st.subheader("Volume Jam Minat (Warm Leads / M1–M3)")
             st.caption("Bar = jumlah minat, Line = rate minat (%). Jam 12:00 dikosongkan.")
 
             im2 = interest_masks(scope_df)
