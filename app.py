@@ -276,8 +276,6 @@ section[data-testid="stSidebar"] div[data-testid="stRadio"] div[role="radiogroup
 
 /* =========================
    LOADING OVERLAY
-   - auto tampil saat upload (progress UI muncul)
-   - auto tampil saat python proses (processing-flag ada)
    ========================= */
 #loading-overlay {{
   position: fixed;
@@ -303,6 +301,21 @@ section[data-testid="stSidebar"] div[data-testid="stRadio"] div[role="radiogroup
   box-shadow: 0 22px 54px rgba(0,0,0,0.12);
 }}
 
+#loading-overlay .loading-rotor {{
+  width: 170px;
+  height: 170px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  transform-origin: 50% 50%;
+  will-change: transform;
+  filter: drop-shadow(0 18px 36px rgba(0,0,0,0.16));
+
+  /* ROTATE: shuriken flow (pelan -> cepat -> pelan) */
+  animation: qcSpinFlow 2.10s linear infinite;
+}}
+
 #loading-overlay img.loading-logo {{
   width: 170px;
   height: 170px;
@@ -310,45 +323,64 @@ section[data-testid="stSidebar"] div[data-testid="stRadio"] div[role="radiogroup
 
   transform-origin: 50% 50%;
   will-change: transform;
-  filter: drop-shadow(0 18px 36px rgba(0,0,0,0.16));
 
-  /* speed tengah2 (antara 1.50s dan 2.80s) */
-  animation: qcPulseSpin 2.10s infinite;
+  /* SCALE: shrink -> pop -> settle (lebih organik) */
+  animation: qcPulse 2.10s ease-in-out infinite;
 }}
 
-/*
-Timeline (2.10s):
-0–10%  (0.21s): shrink pelan
-10–45% (0.735s): percepatan
-45–75% (0.63s): perlambatan
-75–85% (0.21s): pop bigger
-85–100%(0.315s): tahan & settle
-*/
-@keyframes qcPulseSpin {{
-  0%   {{ transform: scale(1.00) rotate(0deg); }}
+/* =========================
+   ROTATION: lebih "ngalir"
+   (banyak titik supaya akselerasi terasa halus)
+   ========================= */
+@keyframes qcSpinFlow {{
+  0%   {{ transform: rotate(0deg); }}
 
-  /* shrink */
-  10%  {{ transform: scale(0.89) rotate(8deg); }}
+  /* masuk pelan */
+  10%  {{ transform: rotate(8deg); }}
+  18%  {{ transform: rotate(28deg); }}
 
-  /* accel (kenaikan derajat makin besar) */
-  20%  {{ transform: scale(0.89) rotate(60deg); }}
-  32%  {{ transform: scale(0.89) rotate(170deg); }}
-  45%  {{ transform: scale(0.89) rotate(320deg); }}
+  /* percepat bertahap */
+  26%  {{ transform: rotate(75deg); }}
+  34%  {{ transform: rotate(150deg); }}
+  40%  {{ transform: rotate(240deg); }}
+  45%  {{ transform: rotate(320deg); }}
 
-  /* decel (kenaikan derajat makin kecil) */
-  60%  {{ transform: scale(0.89) rotate(352deg); }}
-  75%  {{ transform: scale(0.89) rotate(360deg); }}
+  /* perlambat bertahap (ngalir sampai berhenti) */
+  52%  {{ transform: rotate(346deg); }}
+  58%  {{ transform: rotate(355deg); }}
+  64%  {{ transform: rotate(358deg); }}
+  70%  {{ transform: rotate(359.3deg); }}
+  75%  {{ transform: rotate(360deg); }}
 
-  /* pop + settle */
-  85%  {{ transform: scale(1.07) rotate(360deg); }}
-  93%  {{ transform: scale(1.02) rotate(360deg); }}
-  100% {{ transform: scale(1.00) rotate(360deg); }}
+  /* tahan (biar ada “breath”) */
+  100% {{ transform: rotate(360deg); }}
+}}
+
+/* =========================
+   SCALE: shrink -> pop -> settle
+   ========================= */
+@keyframes qcPulse {{
+  0%   {{ transform: scale(1.00); }}
+  10%  {{ transform: scale(0.89); }}
+
+  /* tahan kecil saat spin */
+  45%  {{ transform: scale(0.89); }}
+  75%  {{ transform: scale(0.89); }}
+
+  /* membesar lagi */
+  85%  {{ transform: scale(1.07); }}
+  93%  {{ transform: scale(1.02); }}
+  100% {{ transform: scale(1.00); }}
 }}
 
 @media (prefers-reduced-motion: reduce) {{
+  #loading-overlay .loading-rotor {{
+    animation: none !important;
+    transform: rotate(0deg);
+  }}
   #loading-overlay img.loading-logo {{
     animation: none !important;
-    transform: scale(1) rotate(0);
+    transform: scale(1);
   }}
 }}
 
