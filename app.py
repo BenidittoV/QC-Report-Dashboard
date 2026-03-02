@@ -2,6 +2,7 @@ import altair as alt
 import numpy as np
 import pandas as pd
 import streamlit as st
+import json
 
 # =========================
 # PAGE CONFIG
@@ -18,15 +19,19 @@ st.set_page_config(
 TL_COL = "metadata_teamLeader"
 AGENT_COL = "metadata_namaAgent"
 CALLRESULT_COL = "metadata_callResult"
-DATE_COL = "call_date"  # format YYYY-MM-DD
-DATETIME_COL = "metadata_dateCall"  # contoh: "01 November 2025 08:23:18"
+
+DATE_COL = "call_date"              # format YYYY-MM-DD (opsional jika ada)
+DATETIME_COL = "metadata_dateCall"  # contoh: "19 Februari 2026 08:07:05"
+
 SENTIMENT_CATEGORY_COL = "sentiment_category"
 SENTIMENT_REASON_COL = "sentiment_reason"
-CALLRESULT_COL = "metadata_callResult"
 
+# fallback jika sentiment_* tidak ada
+LOV3_COL = "metadata_resultLov3"
 
 DEFAULT_ALLOWED_CALL_TYPES = [
-    "M1 (Setuju dikirim hitungan)", "M2 (Negosiasi)", "M3 (Setuju dengan hitungan)", "Tidak Minat", "Warm Leads", "Pencairan Minus" 
+    "M1 (Setuju dikirim hitungan)", "M2 (Negosiasi)", "M3 (Setuju dengan hitungan)",
+    "Tidak Minat", "Warm Leads", "Pencairan Minus"
 ]
 
 ASPECT_COLUMNS_CANDIDATES = [
@@ -61,92 +66,94 @@ ASPECT_FRIENDLY_NAMES = {
     "raw_data_say_ref_contract_stat": "Refer Contract Status",
 }
 
-# =========================
-# MODERN CSS (WHITE BG + BLUE SIDEBAR + MAIN TEXT BLACK) + FORCE LIGHT VEGA
-# =========================
-CUSTOM_CSS = """
-<style>
-html, body, [class*="css"]{
-  font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont;
-}
-.stApp, .stApp * { color: #000000; }
-.stApp { background-color: #ffffff; }
-#MainMenu {visibility: hidden;}
-footer {visibility: hidden;}
-header {visibility: hidden;}
+LOADING_IMAGE_URL = "https://static.vecteezy.com/system/resources/previews/010/754/321/non_2x/loading-icon-logo-design-template-illustration-free-vector.jpg"
 
-section[data-testid="stSidebar"] {
+# =========================
+# MODERN CSS + LOADING OVERLAY
+# =========================
+CUSTOM_CSS = f"""
+<style>
+html, body, [class*="css"]{{
+  font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont;
+}}
+.stApp, .stApp * {{ color: #000000; }}
+.stApp {{ background-color: #ffffff; }}
+#MainMenu {{visibility: hidden;}}
+footer {{visibility: hidden;}}
+header {{visibility: hidden;}}
+
+section[data-testid="stSidebar"] {{
   background: linear-gradient(180deg, #002D72, #002D72);
   color: white !important;
   border-right: none;
-}
-section[data-testid="stSidebar"], 
-section[data-testid="stSidebar"] * {
+}}
+section[data-testid="stSidebar"],
+section[data-testid="stSidebar"] * {{
   color: white !important;
-}
+}}
 section[data-testid="stSidebar"] input,
 section[data-testid="stSidebar"] select,
-section[data-testid="stSidebar"] textarea {
+section[data-testid="stSidebar"] textarea {{
   background-color: rgba(255,255,255,0.14) !important;
   color: white !important;
   border-radius: 10px !important;
   border: none !important;
-}
-section[data-testid="stSidebar"] .stCaption, 
-section[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p {
+}}
+section[data-testid="stSidebar"] .stCaption,
+section[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p {{
   color: rgba(255,255,255,0.88) !important;
-}
-section[data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"]{
+}}
+section[data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"]{{
   background: rgba(255,255,255,0.14) !important;
   border: 1px solid rgba(255,255,255,0.40) !important;
   border-radius: 14px !important;
-}
-section[data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"] *{ color: #ffffff !important; }
-section[data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"] button{
+}}
+section[data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"] *{{ color: #ffffff !important; }}
+section[data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"] button{{
   background: rgba(255,255,255,0.18) !important;
   border: 1px solid rgba(255,255,255,0.28) !important;
   color: #ffffff !important;
   border-radius: 12px !important;
-}
+}}
 
-.hero {
+.hero {{
   background: #f8fafc;
   border: 1px solid #e5e7eb;
   border-radius: 16px;
   padding: 18px 20px;
-}
-.hero-title {
+}}
+.hero-title {{
   font-size: 1.4rem;
   font-weight: 800;
   color: #000000;
   margin: 0;
-}
-.hero-sub {
+}}
+.hero-sub {{
   font-size: 0.95rem;
   color: #000000;
   opacity: 0.75;
   margin-top: 4px;
-}
-.card {
+}}
+.card {{
   background: #ffffff;
   border-radius: 16px;
   padding: 16px;
   border: 1px solid #e5e7eb;
   box-shadow: 0 4px 14px rgba(0,0,0,0.04);
-}
-.card h4 {
+}}
+.card h4 {{
   font-size: 0.9rem;
   margin-bottom: 6px;
   color: #000000;
   opacity: 0.70;
-}
-.card .big {
+}}
+.card .big {{
   font-size: 1.6rem;
   font-weight: 800;
   color: #000000;
   margin: 0;
-}
-.badge {
+}}
+.badge {{
   display: inline-block;
   padding: 5px 12px;
   border-radius: 999px;
@@ -155,77 +162,76 @@ section[data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"] button{
   color: #000000;
   border: 1px solid #bfdbfe;
   font-weight: 700;
-}
-[data-testid="stDataFrame"] {
+}}
+[data-testid="stDataFrame"] {{
   border-radius: 14px;
   border: 1px solid #e5e7eb;
   overflow: hidden;
-}
-.stButton button {
+}}
+.stButton button {{
   background: #1d4ed8 !important;
   color: white !important;
   border-radius: 12px !important;
   padding: 0.6rem 1rem !important;
   font-weight: 700 !important;
   border: none !important;
-}
-.stButton button:hover {
+}}
+.stButton button:hover {{
   background: #1e40af !important;
   color: white !important;
-}
-[data-testid="stMetric"] {
+}}
+[data-testid="stMetric"] {{
   background: #ffffff;
   border-radius: 14px;
   padding: 12px;
   border: 1px solid #e5e7eb;
-}
-
-[data-testid="stMetricValue"] {
+}}
+[data-testid="stMetricValue"] {{
   font-weight: 900 !important;
   font-size: 28px !important;
   color: #000000 !important;
-}
+}}
 
-button[data-baseweb="tab"] {
+button[data-baseweb="tab"] {{
   background: transparent;
   font-weight: 700;
   color: #000000;
-}
-button[data-baseweb="tab"][aria-selected="true"] {
+}}
+button[data-baseweb="tab"][aria-selected="true"] {{
   color: #000000;
   border-bottom: 3px solid #1d4ed8;
-}
-details {
+}}
+details {{
   background: #f9fafb;
   border-radius: 12px;
   border: 1px solid #e5e7eb;
   padding: 8px;
-}
-details * { color: #000000 !important; }
-.stCaption, .stCaption * { color: #000000 !important; opacity: 0.75; }
+}}
+details * {{ color: #000000 !important; }}
+.stCaption, .stCaption * {{ color: #000000 !important; opacity: 0.75; }}
 
-.sidebar-logo {
+.sidebar-logo {{
   position: fixed;
   bottom: 18px;
   left: 18px;
   width: 180px;
-}
-.sidebar-logo p {
+}}
+.sidebar-logo p {{
   margin: 6px 0 0 0;
   font-size: 12px;
   color: rgba(255,255,255,0.88) !important;
-}
-.vega-embed, .vega-embed * { background: #ffffff !important; }
-.vega-embed canvas, .vega-embed svg { background: #ffffff !important; }
+}}
+.vega-embed, .vega-embed * {{ background: #ffffff !important; }}
+.vega-embed canvas, .vega-embed svg {{ background: #ffffff !important; }}
 
-/* ===== Radio -> Button Tabs (Sidebar) [ONLY OPTIONS] ===== */
-section[data-testid="stSidebar"] div[data-testid="stRadio"] div[role="radiogroup"]{
+/* Radio -> Button Tabs */
+section[data-testid="stSidebar"] div[data-testid="stRadio"] div[role="radiogroup"]{{
   display: flex !important;
   flex-direction: row !important;
   gap: 10px !important;
   width: 100% !important;
-}
-section[data-testid="stSidebar"] div[data-testid="stRadio"] div[role="radiogroup"] > label{
+}}
+section[data-testid="stSidebar"] div[data-testid="stRadio"] div[role="radiogroup"] > label{{
   flex: 1 1 0 !important;
   display: flex !important;
   justify-content: center !important;
@@ -239,45 +245,111 @@ section[data-testid="stSidebar"] div[data-testid="stRadio"] div[role="radiogroup
   user-select: none !important;
   box-shadow: 0 6px 16px rgba(0,0,0,0.10) !important;
   transition: transform 120ms ease, box-shadow 120ms ease, background 120ms ease, border-color 120ms ease !important;
-}
-section[data-testid="stSidebar"] div[data-testid="stRadio"] div[role="radiogroup"] > label > div:first-child{
+}}
+section[data-testid="stSidebar"] div[data-testid="stRadio"] div[role="radiogroup"] > label > div:first-child{{
   display: none !important;
-}
-section[data-testid="stSidebar"] div[data-testid="stRadio"] div[role="radiogroup"] > label *{
+}}
+section[data-testid="stSidebar"] div[data-testid="stRadio"] div[role="radiogroup"] > label *{{
   color: rgba(255,255,255,0.92) !important;
   font-weight: 800 !important;
   letter-spacing: 0.2px !important;
-}
-section[data-testid="stSidebar"] div[data-testid="stRadio"] div[role="radiogroup"] > label:hover{
+}}
+section[data-testid="stSidebar"] div[data-testid="stRadio"] div[role="radiogroup"] > label:hover{{
   background: rgba(255,255,255,0.22) !important;
   border-color: rgba(255,255,255,0.55) !important;
   transform: translateY(-1px) !important;
   box-shadow: 0 10px 22px rgba(0,0,0,0.16) !important;
-}
-section[data-testid="stSidebar"] div[data-testid="stRadio"] div[role="radiogroup"] > label:active{
+}}
+section[data-testid="stSidebar"] div[data-testid="stRadio"] div[role="radiogroup"] > label:active{{
   transform: translateY(0px) scale(0.99) !important;
   box-shadow: 0 6px 14px rgba(0,0,0,0.12) !important;
-}
-section[data-testid="stSidebar"] div[data-testid="stRadio"] div[role="radiogroup"] > label:has(input:checked){
+}}
+section[data-testid="stSidebar"] div[data-testid="stRadio"] div[role="radiogroup"] > label:has(input:checked){{
   background: #ffffff !important;
   border-color: #ffffff !important;
   box-shadow: 0 12px 26px rgba(0,0,0,0.20) !important;
-}
-section[data-testid="stSidebar"] div[data-testid="stRadio"] div[role="radiogroup"] > label:has(input:checked) *{
+}}
+section[data-testid="stSidebar"] div[data-testid="stRadio"] div[role="radiogroup"] > label:has(input:checked) *{{
   color: #002D72 !important;
   font-weight: 900 !important;
-}
-section[data-testid="stSidebar"] div[data-testid="stRadio"] div[role="radiogroup"] > label:has(input:focus-visible){
-  outline: 3px solid rgba(255,255,255,0.65) !important;
-  outline-offset: 2px !important;
-}
+}}
+
+/* =========================
+   LOADING OVERLAY (FULLSCREEN)
+   ========================= */
+@keyframes spin {{
+  0%   {{ transform: rotate(0deg); }}
+  100% {{ transform: rotate(360deg); }}
+}}
+#loading-overlay {{
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(255,255,255,0.92);
+  z-index: 999999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}}
+#loading-overlay .loading-inner {{
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 18px 22px;
+  border-radius: 18px;
+  border: 1px solid #e5e7eb;
+  background: rgba(255,255,255,0.9);
+  box-shadow: 0 18px 40px rgba(0,0,0,0.10);
+}}
+#loading-overlay img.loading-logo {{
+  width: 110px;
+  height: 110px;
+  border-radius: 999px;
+  animation: spin 1.0s linear infinite;
+}}
+#loading-overlay .loading-text {{
+  font-weight: 800;
+  color: #111827;
+  opacity: 0.9;
+}}
 </style>
 """
 st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 
+LOADING_OVERLAY_HTML = f"""
+<div id="loading-overlay">
+  <div class="loading-inner">
+    <img class="loading-logo" src="{LOADING_IMAGE_URL}" />
+    <div class="loading-text">Memproses file…</div>
+  </div>
+</div>
+"""
+
+def show_loading_overlay():
+    ph = st.empty()
+    ph.markdown(LOADING_OVERLAY_HTML, unsafe_allow_html=True)
+    return ph
+
 # =========================
 # HELPERS
 # =========================
+def make_arrow_safe(df: pd.DataFrame) -> pd.DataFrame:
+    out = df.copy()
+    for col in out.columns:
+        if out[col].dtype == "object":
+            def _coerce(x):
+                if pd.isna(x):
+                    return ""
+                if isinstance(x, (bytes, bytearray)):
+                    return x.decode("utf-8", errors="ignore")
+                if isinstance(x, (dict, list, tuple, set)):
+                    return json.dumps(list(x) if isinstance(x, set) else x, ensure_ascii=False)
+                return str(x)
+            out[col] = out[col].map(_coerce)
+    return out
+
 def normalize_to_binary(v) -> int:
     if pd.isna(v):
         return 0
@@ -314,12 +386,10 @@ def grade_badge(grade: str) -> str:
 def load_data(uploaded_file):
     name = uploaded_file.name.lower()
     if name.endswith(".csv"):
-        df = pd.read_csv(uploaded_file)
-    elif name.endswith(".xlsx") or name.endswith(".xls"):
-        df = pd.read_excel(uploaded_file)
-    else:
-        raise ValueError("Format file tidak didukung. Upload CSV atau XLSX.")
-    return df
+        return pd.read_csv(uploaded_file)
+    if name.endswith(".xlsx") or name.endswith(".xls"):
+        return pd.read_excel(uploaded_file)
+    raise ValueError("Format file tidak didukung. Upload CSV atau XLSX.")
 
 def week_ranges_sun_sat_for_month(year: int, month: int):
     month_start = pd.Timestamp(year=year, month=month, day=1)
@@ -342,6 +412,7 @@ def week_ranges_sun_sat_for_month(year: int, month: int):
     return ranges
 
 def light_table(df: pd.DataFrame):
+    df = make_arrow_safe(df)
     num_cols = df.select_dtypes(include=[np.number]).columns
     fmt = {c: "{:.2f}" for c in num_cols}
     return (
@@ -356,7 +427,7 @@ def light_table(df: pd.DataFrame):
         .set_table_styles([
             {"selector": "th", "props": [
                 ("background-color", "#0A3D91"),
-                ("color", "black"),
+                ("color", "white"),
                 ("border", "1px solid #e5e7eb"),
                 ("font-weight", "700"),
                 ("text-align", "left"),
@@ -389,23 +460,7 @@ def filter_call_types(df: pd.DataFrame) -> pd.DataFrame:
     call_series = df[CALLRESULT_COL].astype(str).str.strip()
     return df[call_series.str.lower().isin(allowed_call_lower)].copy()
 
-def ensure_date(df: pd.DataFrame) -> pd.DataFrame:
-    if DATE_COL not in df.columns:
-        st.error(f"Kolom tanggal `{DATE_COL}` tidak ditemukan. Pastikan ada kolom call_date.")
-        st.stop()
-    out = df.copy()
-    out[DATE_COL] = pd.to_datetime(out[DATE_COL], errors="coerce")
-    out = out.dropna(subset=[DATE_COL])
-    if out.empty:
-        st.warning("Semua call_date gagal diparse. Pastikan format tanggal valid (YYYY-MM-DD).")
-        st.stop()
-    return out
-
 def parse_metadata_datecall(series: pd.Series) -> pd.Series:
-    """
-    Parse format seperti: '01 November 2025 08:23:18' (bulan Indonesia).
-    Output: datetime64[ns] atau NaT jika gagal.
-    """
     s = series.astype(str).str.strip()
     bulan = {
         "januari": "01", "februari": "02", "maret": "03", "april": "04",
@@ -415,68 +470,231 @@ def parse_metadata_datecall(series: pd.Series) -> pd.Series:
     s_low = s.str.lower()
     for nama, mm in bulan.items():
         s_low = s_low.str.replace(fr"\b{nama}\b", mm, regex=True)
-    s_low = s_low.str.replace(r"^(\d{1,2})\s+(\d{2})\s+(\d{4})\s+", r"\1-\2-\3 ", regex=True)
+    s_low = s_low.str.replace(r"^(\d{{1,2}})\s+(\d{{2}})\s+(\d{{4}})\s+", r"\1-\2-\3 ", regex=True)
     return pd.to_datetime(s_low, format="%d-%m-%Y %H:%M:%S", errors="coerce")
 
-def run_performance_block(df_base: pd.DataFrame, header_badges_html: str, title_context: str):
+def ensure_date_and_dt(df: pd.DataFrame) -> pd.DataFrame:
+    out = df.copy()
+
+    if DATETIME_COL in out.columns:
+        out["_dt_call"] = parse_metadata_datecall(out[DATETIME_COL])
+    else:
+        out["_dt_call"] = pd.NaT
+
+    if DATE_COL in out.columns:
+        out[DATE_COL] = pd.to_datetime(out[DATE_COL], errors="coerce")
+    else:
+        if out["_dt_call"].notna().any():
+            out[DATE_COL] = out["_dt_call"].dt.floor("D")
+        else:
+            st.error(f"Tidak ada `{DATE_COL}` dan `{DATETIME_COL}` juga tidak tersedia/valid. Minimal salah satu harus ada.")
+            return pd.DataFrame()
+
+    out = out.dropna(subset=[DATE_COL])
+    if out.empty:
+        st.warning("Semua tanggal gagal diparse. Pastikan format tanggal valid.")
+        return pd.DataFrame()
+
+    return out
+
+def compute_overall_from_aspects(df_subset: pd.DataFrame, aspect_cols: list[str]) -> float:
+    if df_subset.empty:
+        return np.nan
+    vals = [safe_pct(df_subset[c].apply(normalize_to_binary)) for c in aspect_cols]
+    return round(float(np.nanmean(vals)), 2) if len(vals) else np.nan
+
+# ===== interest helpers =====
+def _norm_text(x) -> str:
+    if pd.isna(x):
+        return ""
+    return str(x).strip().lower()
+
+def _compact(s: str) -> str:
+    return "".join(ch for ch in s if ch.isalnum())
+
+def is_warmleads_value(x) -> bool:
+    v = _compact(_norm_text(x))
+    return v in {"warmleads", "warmlead"}
+
+def agent_positive_mask(series: pd.Series) -> pd.Series:
+    s = series.astype(str).str.lower()
+    m_mask = s.str.contains(r"\bm1\b|\bm2\b|\bm3\b", na=False)
+    w_mask = s.str.contains(r"warm\s*leads?|warmleads?", na=False)
+    return m_mask | w_mask
+
+def interest_masks(df: pd.DataFrame):
+    req_sent = [SENTIMENT_CATEGORY_COL, SENTIMENT_REASON_COL, CALLRESULT_COL]
+    if all(c in df.columns for c in req_sent):
+        dfx = df.copy()
+        dfx[SENTIMENT_CATEGORY_COL] = dfx[SENTIMENT_CATEGORY_COL].astype(str).str.strip().str.lower()
+        dfx[SENTIMENT_REASON_COL] = dfx[SENTIMENT_REASON_COL].astype(str).str.lower()
+
+        ai_mask = dfx[SENTIMENT_CATEGORY_COL].isin(["potensi berminat", "ragu-ragu"])
+        agent_mask = agent_positive_mask(dfx[CALLRESULT_COL])
+
+        keywords = ["pikir-pikir", "pikir pikir", "pikir", "pertimbangkan", "diskusi", "diskusikan"]
+        pattern = "|".join(keywords)
+        rule3 = (
+            (~agent_mask) &
+            (dfx[SENTIMENT_CATEGORY_COL] == "tidak berminat") &
+            (dfx[SENTIMENT_REASON_COL].str.contains(pattern, na=False))
+        )
+
+        actual_mask = ai_mask | agent_mask | rule3
+        return {"mode": "sentiment", "ai_mask": ai_mask, "agent_mask": agent_mask, "actual_mask": actual_mask}
+
+    req_lov3 = [LOV3_COL, CALLRESULT_COL]
+    if all(c in df.columns for c in req_lov3):
+        dfx = df.copy()
+        ai_mask = dfx[LOV3_COL].apply(is_warmleads_value)
+        agent_mask = agent_positive_mask(dfx[CALLRESULT_COL])
+        actual_mask = ai_mask | agent_mask
+        return {"mode": "lov3", "ai_mask": ai_mask, "agent_mask": agent_mask, "actual_mask": actual_mask}
+
+    return None
+
+# ===== chart helpers =====
+def style_chart(chart, height: int):
+    return (
+        chart.properties(height=height, background="white")
+        .configure_view(stroke=None, fill="white")
+        .configure_axis(labelColor="black", titleColor="black", gridColor="#e5e7eb")
+    )
+
+# =========================
+# CORE RENDER BLOCK
+# =========================
+def run_performance_block(df_base: pd.DataFrame, header_badges_html: str, title_context: str, key_prefix: str):
     df_base = filter_call_types(df_base)
     if df_base.empty:
         st.warning("Tidak ada data setelah filter call type.")
-        st.stop()
+        return
 
-    df_base = ensure_date(df_base)
+    df_base = ensure_date_and_dt(df_base)
+    if df_base.empty:
+        return
 
-    df_base["_month"] = df_base[DATE_COL].dt.to_period("M").astype(str)
-    month_list = sorted(df_base["_month"].unique().tolist())
-    with st.sidebar:
-        selected_month = st.selectbox("Bulan dan Tahun yang terdeteksi: ", month_list, index=len(month_list) - 1)
+    # AUTO DETECT MODE:
+    unique_days = int(df_base[DATE_COL].dt.date.nunique())
+    time_mode = "Harian" if unique_days <= 1 else "Bulanan"
 
-    dfm = df_base[df_base["_month"] == selected_month].copy()
-    if dfm.empty:
-        st.warning("Tidak ada data untuk bulan terpilih.")
-        st.stop()
-
-    aspect_cols = [c for c in ASPECT_COLUMNS_CANDIDATES if c in dfm.columns]
-    missing_aspects = [c for c in ASPECT_COLUMNS_CANDIDATES if c not in dfm.columns]
+    # aspek
+    aspect_cols = [c for c in ASPECT_COLUMNS_CANDIDATES if c in df_base.columns]
+    missing_aspects = [c for c in ASPECT_COLUMNS_CANDIDATES if c not in df_base.columns]
     if not aspect_cols:
         st.error("Tidak ada kolom aspek yang ditemukan di file untuk dihitung.")
-        st.stop()
+        return
 
-    yy, mm = selected_month.split("-")
-    yy, mm = int(yy), int(mm)
-    week_ranges = week_ranges_sun_sat_for_month(yy, mm)
+    selected_period_label = ""
+    selected_month = None
 
-    rows = []
-    for col in aspect_cols:
-        row = {"Aspek": ASPECT_FRIENDLY_NAMES.get(col, col)}
-        for i, (ws, we) in enumerate(week_ranges, start=1):
-            mask = (dfm[DATE_COL] >= ws) & (dfm[DATE_COL] <= we)
-            df_w = dfm.loc[mask]
-            vals_w = df_w[col].apply(normalize_to_binary)
-            pct_w = safe_pct(vals_w)
-            row[f"Minggu {i} (%)"] = pct_w if not np.isnan(pct_w) else np.nan
-        vals_m = dfm[col].apply(normalize_to_binary)
-        pct_m = safe_pct(vals_m)
-        row["Persentase Bulanan (%)"] = pct_m if not np.isnan(pct_m) else np.nan
-        row["Grade"] = tier_from_percent(pct_m) if not np.isnan(pct_m) else "-"
-        rows.append(row)
+    # =========================
+    # SELECT PERIOD (NOT IN SIDEBAR)
+    # =========================
+    if time_mode == "Bulanan":
+        df_base["_month"] = df_base[DATE_COL].dt.to_period("M").astype(str)
+        month_list = sorted(df_base["_month"].unique().tolist())
 
-    result_df = pd.DataFrame(rows).sort_values(by="Persentase Bulanan (%)", ascending=True)
-    overall_monthly = round(float(pd.to_numeric(result_df["Persentase Bulanan (%)"], errors="coerce").mean()), 2)
+        selected_month = st.selectbox(
+            "Bulan & Tahun (terdeteksi)",
+            month_list,
+            index=len(month_list) - 1,
+            key=f"{key_prefix}_month",
+        )
+        selected_period_label = f"{selected_month}"
 
+        dfm = df_base[df_base["_month"] == selected_month].copy()
+        if dfm.empty:
+            st.warning("Tidak ada data untuk bulan terpilih.")
+            return
+
+        yy, mm = selected_month.split("-")
+        yy, mm = int(yy), int(mm)
+        week_ranges = week_ranges_sun_sat_for_month(yy, mm)
+
+        rows = []
+        for col in aspect_cols:
+            row = {"Aspek": ASPECT_FRIENDLY_NAMES.get(col, col)}
+            for i, (ws, we) in enumerate(week_ranges, start=1):
+                df_w = dfm[(dfm[DATE_COL] >= ws) & (dfm[DATE_COL] <= we)]
+                pct_w = safe_pct(df_w[col].apply(normalize_to_binary))
+                row[f"Minggu {i} (%)"] = pct_w if not np.isnan(pct_w) else np.nan
+
+            pct_m = safe_pct(dfm[col].apply(normalize_to_binary))
+            row["Persentase Bulanan (%)"] = pct_m if not np.isnan(pct_m) else np.nan
+            row["Grade"] = tier_from_percent(pct_m) if not np.isnan(pct_m) else "-"
+            rows.append(row)
+
+        result_df = pd.DataFrame(rows).sort_values(by="Persentase Bulanan (%)", ascending=True)
+        overall_value = round(float(pd.to_numeric(result_df["Persentase Bulanan (%)"], errors="coerce").mean()), 2)
+        scope_df = dfm
+
+    else:
+        if df_base["_dt_call"].notna().sum() == 0:
+            st.error(f"Mode Harian membutuhkan `{DATETIME_COL}` yang valid (contoh: 19 Februari 2026 08:07:05).")
+            return
+
+        only_day = df_base[DATE_COL].dt.date.unique()
+        only_day = only_day[0] if len(only_day) else "-"
+        selected_period_label = str(only_day)
+
+        dfm = df_base.copy()
+
+        buckets = [
+            ("08–10 (%)", 8, 10),
+            ("10–12 (%)", 10, 12),
+            ("13–15 (%)", 13, 15),
+            ("15–17 (%)", 15, 17),
+        ]
+
+        dfm["_hour"] = dfm["_dt_call"].dt.hour
+        outside_mask = (dfm["_hour"] < 8) | (dfm["_hour"] >= 17)
+        has_outside = bool(outside_mask.any())
+
+        rows = []
+        for col in aspect_cols:
+            row = {"Aspek": ASPECT_FRIENDLY_NAMES.get(col, col)}
+            for label, h0, h1 in buckets:
+                d = dfm[(dfm["_hour"] >= h0) & (dfm["_hour"] < h1)]
+                pct = safe_pct(d[col].apply(normalize_to_binary))
+                row[label] = pct if not np.isnan(pct) else np.nan
+
+            if has_outside:
+                d_out = dfm[outside_mask]
+                pct_out = safe_pct(d_out[col].apply(normalize_to_binary))
+                row["Di luar 08–17 (%)"] = pct_out if not np.isnan(pct_out) else np.nan
+
+            pct_d = safe_pct(dfm[col].apply(normalize_to_binary))
+            row["Persentase Harian (%)"] = pct_d if not np.isnan(pct_d) else np.nan
+            row["Grade"] = tier_from_percent(pct_d) if not np.isnan(pct_d) else "-"
+            rows.append(row)
+
+        result_df = pd.DataFrame(rows).sort_values(by="Persentase Harian (%)", ascending=True)
+        overall_value = round(float(pd.to_numeric(result_df["Persentase Harian (%)"], errors="coerce").mean()), 2)
+        scope_df = dfm
+
+    # =========================
+    # KPI HEADER (kotak mitra) + period badge
+    # =========================
+    period_badges = f"""
+&nbsp; <span class="badge">Mode: <b>{time_mode}</b></span>
+&nbsp; <span class="badge">Periode: <b>{selected_period_label}</b></span>
+"""
     left, right = st.columns([1.4, 1.0], vertical_alignment="center")
     with left:
         st.markdown(
             f"""<div class="card">
 <h4>{title_context}</h4>
 {header_badges_html}
+{period_badges}
 </div>""",
             unsafe_allow_html=True
         )
     with right:
         c1, c2, c3 = st.columns(3)
-        c1.markdown(f'<div class="card"><h4>Overall Bulanan</h4><p class="big">{overall_monthly:.2f}%</p></div>', unsafe_allow_html=True)
-        c2.markdown(f'<div class="card"><h4>Jumlah Rekaman</h4><p class="big">{len(dfm)}</p></div>', unsafe_allow_html=True)
+        label_overall = "Overall Bulanan" if time_mode == "Bulanan" else "Overall Harian"
+        c1.markdown(f'<div class="card"><h4>{label_overall}</h4><p class="big">{overall_value:.2f}%</p></div>', unsafe_allow_html=True)
+        c2.markdown(f'<div class="card"><h4>Jumlah Rekaman</h4><p class="big">{len(scope_df)}</p></div>', unsafe_allow_html=True)
         c3.markdown(f'<div class="card"><h4>Aspek Dihitung</h4><p class="big">{len(aspect_cols)}</p></div>', unsafe_allow_html=True)
 
     st.write("")
@@ -484,37 +702,54 @@ def run_performance_block(df_base: pd.DataFrame, header_badges_html: str, title_
         with st.expander("ℹ️ Beberapa kolom aspek tidak ditemukan (aman, hanya di-skip)"):
             st.write(missing_aspects)
 
-    sentiment_cards = calculate_three_sentiment_cards(dfm)
+    # =========================
+    # KPI MINAT
+    # =========================
+    im = interest_masks(scope_df)
+    ai_mask = agent_mask = actual_mask = None
+    interest_mode = None
 
-    actual_df = None
-
-    if sentiment_cards:
-        total_ai, total_agent, total_actual, actual_mask = sentiment_cards
-        actual_df = dfm[actual_mask].copy()
-
-        c1, c2, c3 = st.columns(3)
-
-        c1.metric(
-            "Ragu/ Minat menurut AI/ Excel",
-            total_ai,
+    if im is None:
+        st.info(
+            "Kolom untuk hitung minat tidak ditemukan. "
+            f"Butuh: `{SENTIMENT_CATEGORY_COL}`+`{SENTIMENT_REASON_COL}` atau `{LOV3_COL}`, dan `{CALLRESULT_COL}`."
         )
+    else:
+        interest_mode = im["mode"]
+        ai_mask = im["ai_mask"]
+        agent_mask = im["agent_mask"]
+        actual_mask = im["actual_mask"]
 
-        c2.metric(
-            "Minat menurut Jenis Call (M1, M2, M3)",
-            total_agent,
-        )
+        if interest_mode == "lov3":
+            warm_cnt = int(ai_mask.sum())
+            not_cnt = int((~ai_mask).sum())
+            m1, m2 = st.columns(2)
+            m1.metric("Warm Leads / Minat (AI Lov3)", warm_cnt)
+            m2.metric("Tidak Minat (AI Lov3)", not_cnt)
+        else:
+            sc1, sc2, sc3 = st.columns(3)
+            sc1.metric("Ragu/ Minat menurut AI/ Excel", int(ai_mask.sum()))
+            sc2.metric("Minat menurut Call Result (M1/M2/M3/Warm)", int(agent_mask.sum()))
+            sc3.metric("Minat Aktual (Rekonsiliasi)", int(actual_mask.sum()))
 
-        c3.metric(
-            "Minat Aktual (Hasil Rekonsiliasi Algoritma)",
-            total_actual,
-        )
-
+    # =========================
+    # TABS
+    # =========================
     st.markdown("<hr style='margin: 25px 0 15px 0; border: 1px solid #e5e7eb;'>", unsafe_allow_html=True)
-    tab1, tab2, tab_hour, tab3 = st.tabs(["Overview", "Weekly Trend", "Hourly Trend", "Data & Detail"])
 
+    if time_mode == "Bulanan":
+        tab1, tab2, tab_hour, tab3 = st.tabs(["Overview", "Weekly Trend", "Hourly Trend", "Data & Detail"])
+    else:
+        tab1, tab_hour, tab3 = st.tabs(["Overview", "Hourly Trend", "Data & Detail"])
+        tab2 = None
+
+    # =========================
+    # TAB 1: OVERVIEW
+    # =========================
     with tab1:
-        st.subheader("Ringkasan Performa Bulanan per Aspek")
-        st.caption("Diurutkan dari yang terlemah ke terkuat (bulanan).")
+        title = "Ringkasan Performa Bulanan per Aspek" if time_mode == "Bulanan" else "Ringkasan Performa Harian per Aspek"
+        st.subheader(title)
+        st.caption("Diurutkan dari yang terlemah ke terkuat.")
 
         show_df = result_df.copy()
         show_df["Grade"] = show_df["Grade"].apply(grade_badge)
@@ -522,456 +757,262 @@ def run_performance_block(df_base: pd.DataFrame, header_badges_html: str, title_
         pct_cols = [c for c in show_df.columns if "(%)" in c]
         show_df_display = show_df.copy()
         for c in pct_cols:
-            show_df_display[c] = show_df_display[c].apply(
-                lambda x: "Tidak ada rekaman" if pd.isna(x) else f"{x:.2f}%"
-            )
+            show_df_display[c] = show_df_display[c].apply(lambda x: "Tidak ada rekaman" if pd.isna(x) else f"{x:.2f}%")
 
         st.dataframe(light_table(show_df_display), use_container_width=True, hide_index=True)
 
         colL, colR = st.columns(2)
+        key_pct = "Persentase Bulanan (%)" if time_mode == "Bulanan" else "Persentase Harian (%)"
         with colL:
             st.markdown("### Top 5 Aspek Terlemah")
-            st.dataframe(
-                light_table(show_df_display.head(5)[["Aspek", "Persentase Bulanan (%)", "Grade"]]),
-                use_container_width=True,
-                hide_index=True
-            )
+            st.dataframe(light_table(show_df_display.head(5)[["Aspek", key_pct, "Grade"]]), use_container_width=True, hide_index=True)
         with colR:
             st.markdown("### Top 5 Aspek Terkuat")
             st.dataframe(
-                light_table(
-                    show_df_display.sort_values(by="Persentase Bulanan (%)", ascending=False)
-                    .head(5)[["Aspek", "Persentase Bulanan (%)", "Grade"]]
-                ),
+                light_table(show_df_display.sort_values(by=key_pct, ascending=False).head(5)[["Aspek", key_pct, "Grade"]]),
                 use_container_width=True,
                 hide_index=True
             )
 
-    with tab2:
-        st.subheader("Trend Overall per Minggu")
+    # =========================
+    # TAB 2: WEEKLY TREND (ONLY BULANAN)
+    # =========================
+    if time_mode == "Bulanan" and tab2 is not None:
+        with tab2:
+            st.subheader("Trend Overall per Minggu")
 
-        weekly = []
-        for i, (ws, we) in enumerate(week_ranges, start=1):
-            vals = []
-            df_w = dfm[(dfm[DATE_COL] >= ws) & (dfm[DATE_COL] <= we)]
-            for c in aspect_cols:
-                if not df_w.empty:
-                    vals.append(safe_pct(df_w[c].apply(normalize_to_binary)))
+            yy, mm = selected_month.split("-")
+            yy, mm = int(yy), int(mm)
+            week_ranges = week_ranges_sun_sat_for_month(yy, mm)
 
-            weekly.append({
-                "Minggu": f"M{i}",
-                "Overall": round(float(np.nanmean(vals)), 2),
-                "Jumlah Rekaman": len(df_w)
-            })
+            weekly = []
+            for i, (ws, we) in enumerate(week_ranges, start=1):
+                df_w = scope_df[(scope_df[DATE_COL] >= ws) & (scope_df[DATE_COL] <= we)]
+                overall_w = compute_overall_from_aspects(df_w, aspect_cols)
+                weekly.append({"Minggu": f"M{i}", "Overall": overall_w, "Jumlah Rekaman": len(df_w)})
 
-        chart_df = pd.DataFrame(weekly)
+            chart_df = pd.DataFrame(weekly)
+            df_kpi = chart_df.dropna(subset=["Overall"]).copy()
+            avg_weekly = float(df_kpi["Overall"].mean()) if not df_kpi.empty else np.nan
 
-        # =========================
-        # KPI SUMMARY
-        # =========================
-        df_kpi = chart_df.dropna(subset=["Overall"]).copy()
-
-        total_records = int(chart_df["Jumlah Rekaman"].sum())
-        avg_weekly = float(df_kpi["Overall"].mean()) if not df_kpi.empty else np.nan
-        best = df_kpi.loc[df_kpi["Overall"].idxmax()] if not df_kpi.empty else None
-        worst = df_kpi.loc[df_kpi["Overall"].idxmin()] if not df_kpi.empty else None
-
-        k1, k2, k3= st.columns(3)
-
-        if best is not None:
-            k1.markdown(
-                f'<div class="card"><h4>Best Week</h4><p class="big">{best["Minggu"]} • {best["Overall"]:.2f}%</p></div>',
-                unsafe_allow_html=True
+            base = alt.Chart(chart_df).encode(
+                x=alt.X("Minggu:N", title="Minggu", axis=alt.Axis(labelAngle=0)),
+                y=alt.Y("Overall:Q", title="Overall (%)")
             )
-            k2.markdown(
-                f'<div class="card"><h4>Worst Week</h4><p class="big">{worst["Minggu"]} • {worst["Overall"]:.2f}%</p></div>',
-                unsafe_allow_html=True
+            line = base.mark_line(strokeWidth=4, point=alt.OverlayMarkDef(size=90)).encode(
+                tooltip=[
+                    alt.Tooltip("Minggu:N", title="Minggu"),
+                    alt.Tooltip("Overall:Q", title="Overall (%)", format=".2f"),
+                    alt.Tooltip("Jumlah Rekaman:Q", title="Jumlah Rekaman"),
+                ]
             )
-            k3.markdown(
-                f'<div class="card"><h4>Avg Weekly</h4><p class="big">{avg_weekly:.2f}%</p></div>',
-                unsafe_allow_html=True
-            )
-        else:
-            k1.markdown('<div class="card"><h4>Best Week</h4><p class="big">-</p></div>', unsafe_allow_html=True)
-            k2.markdown('<div class="card"><h4>Worst Week</h4><p class="big">-</p></div>', unsafe_allow_html=True)
-            k3.markdown('<div class="card"><h4>Avg Weekly</h4><p class="big">-</p></div>', unsafe_allow_html=True)
+            area = base.mark_area(opacity=0.15)
 
-        st.write("")
-
-        # =========================
-        # CHART
-        # =========================
-        base = alt.Chart(chart_df).encode(
-            x=alt.X(
-                "Minggu:N",
-                title="Minggu",
-                axis=alt.Axis(labelAngle=0, labelColor="black", titleColor="black")
-            ),
-            y=alt.Y(
-                "Overall:Q",
-                title="Overall (%)",
-                axis=alt.Axis(labelColor="black", titleColor="black", gridColor="#e5e7eb")
-            )
-        )
-
-        area = base.mark_area(opacity=0.15)
-
-        line = base.mark_line(
-            strokeWidth=4,
-            point=alt.OverlayMarkDef(size=90)
-        ).encode(
-            tooltip=[
-                alt.Tooltip("Minggu:N", title="Minggu"),
-                alt.Tooltip("Overall:Q", title="Overall (%)", format=".2f"),
-                alt.Tooltip("Jumlah Rekaman:Q", title="Jumlah Rekaman")
-            ]
-        )
-
-        # Average line
-        if not np.isnan(avg_weekly):
-            rule = alt.Chart(pd.DataFrame({"avg": [avg_weekly]})).mark_rule(
-                strokeDash=[6, 6]
-            ).encode(y="avg:Q")
-
-            label = alt.Chart(pd.DataFrame({
-                "avg": [avg_weekly],
-                "txt": [f"Avg {avg_weekly:.1f}%"]
-            })).mark_text(
-                align="left",
-                dx=6,
-                dy=-6
-            ).encode(
-                y="avg:Q",
-                text="txt:N"
-            )
-
-            final_chart = area + line + rule + label
-        else:
-            final_chart = area + line
-
-        final_chart = final_chart.properties(
-            height=360,
-            background="white"
-        ).configure_view(
-            stroke=None,
-            fill="white"
-        ).configure_axis(
-            labelFontSize=12,
-            titleFontSize=13
-        )
-
-        st.altair_chart(final_chart, use_container_width=True)
-
-        # =========================
-        # DETAIL TABLE
-        # =========================
-        # =========================
-        # VOLUME REKAMAN PER MINGGU
-        # =========================
-        st.write("")
-        st.caption("Volume Rekaman per Minggu")
-
-        bar_week = alt.Chart(chart_df).mark_bar().encode(
-            x=alt.X("Minggu:N", title="Minggu"),
-            y=alt.Y("Jumlah Rekaman:Q", title="Jumlah Rekaman"),
-            tooltip=[
-                alt.Tooltip("Minggu:N", title="Minggu"),
-                alt.Tooltip("Jumlah Rekaman:Q", title="Jumlah Rekaman")
-            ],
-        ).properties(
-            height=160,
-            background="white"
-        ).configure_view(
-            stroke=None,
-            fill="white"
-        ).configure_axis(
-            labelColor="black",
-            titleColor="black",
-            gridColor="#e5e7eb"
-        )
-
-        st.altair_chart(bar_week, use_container_width=True)
-
-        # =========================
-        # DETAIL TABLE
-        # =========================
-        with st.expander("Detail angka per minggu"):
-            st.dataframe(
-                light_table(chart_df[["Minggu", "Overall", "Jumlah Rekaman"]]),
-                use_container_width=True,
-                hide_index=True
-            )
-
-
-    with tab_hour:
-        st.subheader("Performa Overall per Jam (08:00–17:00)")
-        st.caption("Overall per jam = rata-rata semua aspek pada jam tersebut. Dihitung dari metadata_dateCall.")
-
-        if DATETIME_COL not in dfm.columns:
-            st.warning(f"Kolom `{DATETIME_COL}` tidak ditemukan. Hourly Trend tidak bisa dihitung.")
-        else:
-            dfh = dfm.copy()
-            dfh["_dt_call"] = parse_metadata_datecall(dfh[DATETIME_COL])
-            dfh = dfh.dropna(subset=["_dt_call"])
-
-            if dfh.empty:
-                st.warning("Semua metadata_dateCall gagal diparse. Pastikan format seperti: 01 November 2025 08:23:18")
+            if not np.isnan(avg_weekly):
+                rule = alt.Chart(pd.DataFrame({"avg": [avg_weekly]})).mark_rule(strokeDash=[6, 6]).encode(y="avg:Q")
+                label = alt.Chart(pd.DataFrame({"avg": [avg_weekly], "txt": [f"Avg {avg_weekly:.1f}%"]})).mark_text(
+                    align="left", dx=6, dy=-6
+                ).encode(y="avg:Q", text="txt:N")
+                chart_overall = style_chart(area + line + rule + label, height=360)
             else:
-                dfh["_hour"] = dfh["_dt_call"].dt.hour
-                hours = list(range(8, 18))
-                hourly_rows = []
+                chart_overall = style_chart(area + line, height=360)
 
-                for h in hours:
-                    d = dfh[dfh["_hour"] == h]
-                    if d.empty:
-                        hourly_rows.append({"Jam": f"{h:02d}:00", "Overall": np.nan, "Jumlah Rekaman": 0, "Hour": h})
-                        continue
-                    vals = [safe_pct(d[c].apply(normalize_to_binary)) for c in aspect_cols]
-                    overall_h = round(float(np.nanmean(vals)), 2)
-                    hourly_rows.append({"Jam": f"{h:02d}:00", "Overall": overall_h, "Jumlah Rekaman": len(d), "Hour": h})
+            st.altair_chart(chart_overall, use_container_width=True)
 
-                hour_df = pd.DataFrame(hourly_rows).sort_values("Hour")
-                df_kpi = hour_df.dropna(subset=["Overall"]).copy()
-                total_calls_workhour = int(hour_df["Jumlah Rekaman"].sum())
-                best = df_kpi.loc[df_kpi["Overall"].idxmax()] if not df_kpi.empty else None
-                worst = df_kpi.loc[df_kpi["Overall"].idxmin()] if not df_kpi.empty else None
-                avg_overall = float(df_kpi["Overall"].mean()) if not df_kpi.empty else np.nan
+            st.write("")
+            st.caption("Volume Rekaman per Minggu")
+            bar_week = alt.Chart(chart_df).mark_bar().encode(
+                x=alt.X("Minggu:N", title="Minggu"),
+                y=alt.Y("Jumlah Rekaman:Q", title="Jumlah Rekaman"),
+                tooltip=[alt.Tooltip("Minggu:N", title="Minggu"), alt.Tooltip("Jumlah Rekaman:Q", title="Jumlah Rekaman")]
+            )
+            st.altair_chart(style_chart(bar_week, height=160), use_container_width=True)
 
-                k1, k2, k3 = st.columns(3)
-                if best is not None:
-                    k1.markdown(f'<div class="card"><h4>Best Hour</h4><p class="big">{best["Jam"]} • {best["Overall"]:.2f}%</p></div>', unsafe_allow_html=True)
-                    k2.markdown(f'<div class="card"><h4>Worst Hour</h4><p class="big">{worst["Jam"]} • {worst["Overall"]:.2f}%</p></div>', unsafe_allow_html=True)
-                else:
-                    k1.markdown('<div class="card"><h4>Best Hour</h4><p class="big">-</p></div>', unsafe_allow_html=True)
-                    k2.markdown('<div class="card"><h4>Worst Hour</h4><p class="big">-</p></div>', unsafe_allow_html=True)
-                k3.markdown(f'<div class="card"><h4>Total Rekaman (08–17)</h4><p class="big">{total_calls_workhour}</p></div>', unsafe_allow_html=True)
-                st.write("")
+            st.write("")
+            st.subheader("Jumlah Minat per Hari (Bulan Terpilih)")
+            st.caption("Bar = jumlah minat, Line = rate minat (%).")
 
-                base = alt.Chart(hour_df).encode(
-                    x=alt.X("Jam:N", sort=[f"{h:02d}:00" for h in hours], title="Jam", axis=alt.Axis(labelAngle=0))
+            if actual_mask is None:
+                st.info("Tidak bisa buat grafik minat per hari karena kolom minat tidak tersedia.")
+            else:
+                dfd = scope_df.copy()
+                dfd["_day_dt"] = pd.to_datetime(dfd[DATE_COL]).dt.floor("D")
+                dfd["_is_interest"] = actual_mask.values
+
+                daily = (
+                    dfd.groupby("_day_dt", as_index=False)
+                    .agg(jumlah_minat=("_is_interest", "sum"), jumlah_rekaman=("_is_interest", "size"))
                 )
+                daily["rate_minat"] = np.where(
+                    daily["jumlah_rekaman"] > 0,
+                    (daily["jumlah_minat"] / daily["jumlah_rekaman"] * 100.0),
+                    np.nan
+                ).round(2)
 
-                area = base.mark_area(opacity=0.18).encode(y=alt.Y("Overall:Q", title="Overall (%)"))
-                line = base.mark_line(point=alt.OverlayMarkDef(size=80), strokeWidth=4).encode(
-                    y=alt.Y("Overall:Q", title="Overall (%)"),
+                base_rate = alt.Chart(daily).encode(
+                    x=alt.X("_day_dt:T", title="Tanggal", axis=alt.Axis(labelAngle=-45)),
+                    y=alt.Y("rate_minat:Q", title="Rate Minat (%)"),
                     tooltip=[
-                        alt.Tooltip("Jam:N", title="Jam"),
-                        alt.Tooltip("Overall:Q", title="Overall (%)", format=".2f"),
-                        alt.Tooltip("Jumlah Rekaman:Q", title="Jumlah Rekaman"),
+                        alt.Tooltip("_day_dt:T", title="Tanggal"),
+                        alt.Tooltip("jumlah_minat:Q", title="Jumlah Minat"),
+                        alt.Tooltip("jumlah_rekaman:Q", title="Jumlah Rekaman"),
+                        alt.Tooltip("rate_minat:Q", title="Rate Minat (%)", format=".2f"),
                     ],
                 )
+                line_rate = base_rate.mark_line(strokeWidth=4, point=alt.OverlayMarkDef(size=90))
+                area_rate = base_rate.mark_area(opacity=0.15)
+                st.altair_chart(style_chart(area_rate + line_rate, height=260), use_container_width=True)
 
-                if not np.isnan(avg_overall):
-                    rule = alt.Chart(pd.DataFrame({"avg": [avg_overall]})).mark_rule(strokeDash=[6, 6]).encode(y="avg:Q")
-                    label = alt.Chart(pd.DataFrame({"avg": [avg_overall], "txt": [f"Avg {avg_overall:.1f}%"]})).mark_text(
-                        align="left", dx=6, dy=-6
-                    ).encode(y="avg:Q", text="txt:N")
-                    top_chart = area + line + rule + label
-                else:
-                    top_chart = area + line
-
-                top_chart = top_chart.properties(height=320, background="white").configure_view(stroke=None, fill="white").configure_axis(
-                    labelColor="black", titleColor="black", gridColor="#e5e7eb"
+                bar_cnt = alt.Chart(daily).mark_bar().encode(
+                    x=alt.X("_day_dt:T", title="Tanggal", axis=alt.Axis(labelAngle=-45)),
+                    y=alt.Y("jumlah_minat:Q", title="Jumlah Minat"),
+                    tooltip=[
+                        alt.Tooltip("_day_dt:T", title="Tanggal"),
+                        alt.Tooltip("jumlah_minat:Q", title="Jumlah Minat"),
+                        alt.Tooltip("jumlah_rekaman:Q", title="Jumlah Rekaman"),
+                        alt.Tooltip("rate_minat:Q", title="Rate Minat (%)", format=".2f"),
+                    ],
                 )
-                st.altair_chart(top_chart, use_container_width=True)
+                st.altair_chart(style_chart(bar_cnt, height=180), use_container_width=True)
 
-                st.write("")
-                st.caption("Volume Rekaman per Jam")
-                bar = alt.Chart(hour_df).mark_bar().encode(
-                    x=alt.X("Jam:N", sort=[f"{h:02d}:00" for h in hours], title="Jam"),
-                    y=alt.Y("Jumlah Rekaman:Q", title="Jumlah Rekaman"),
-                    tooltip=[alt.Tooltip("Jam:N", title="Jam"), alt.Tooltip("Jumlah Rekaman:Q", title="Jumlah Rekaman")],
-                ).properties(height=160, background="white").configure_view(stroke=None, fill="white").configure_axis(
-                    labelColor="black", titleColor="black", gridColor="#e5e7eb"
-                )
-                st.altair_chart(bar, use_container_width=True)
+    # =========================
+    # TAB: HOURLY TREND
+    # =========================
+    with tab_hour:
+        st.subheader("Performa Overall per Jam (08:00–17:00)")
+        st.caption("Jam 12:00–13:00 dianggap istirahat → dikosongkan.")
 
-                with st.expander("Detail angka per jam"):
-                    st.dataframe(light_table(hour_df[["Jam", "Overall", "Jumlah Rekaman"]]), use_container_width=True, hide_index=True)
+        if scope_df["_dt_call"].notna().sum() == 0:
+            st.warning(f"Kolom `{DATETIME_COL}` tidak ditemukan/valid. Hourly Trend tidak bisa dihitung.")
+        else:
+            dfh = scope_df.dropna(subset=["_dt_call"]).copy()
+            dfh["_hour"] = dfh["_dt_call"].dt.hour
 
-    with tab3:
-        # =========================
-        # ACTUAL POTENSI MINAT DATA
-        # =========================
-        if actual_df is not None and not actual_df.empty:
+            hours = [8, 9, 10, 11, 12, 13, 14, 15, 16, 17]
+            sort_jam = [f"{h:02d}:00" for h in hours]
 
-            st.subheader("🎯 Data Actual Potensi Minat (Reconciled)")
-            st.caption("Data yang masuk ke perhitungan Actual Potensi Minat.")
+            hourly_rows = []
+            for h in hours:
+                if h == 12:
+                    hourly_rows.append({"Jam": "12:00", "Overall": np.nan, "Jumlah Rekaman": np.nan, "Hour": 12})
+                    continue
 
-            st.dataframe(
-                light_table(actual_df),
-                use_container_width=True,
-                hide_index=True
+                d = dfh[dfh["_hour"] == h]
+                if d.empty:
+                    hourly_rows.append({"Jam": f"{h:02d}:00", "Overall": np.nan, "Jumlah Rekaman": np.nan, "Hour": h})
+                    continue
+
+                overall_h = compute_overall_from_aspects(d, aspect_cols)
+                hourly_rows.append({"Jam": f"{h:02d}:00", "Overall": overall_h, "Jumlah Rekaman": float(len(d)), "Hour": h})
+
+            hour_df = pd.DataFrame(hourly_rows).sort_values("Hour")
+            df_kpi = hour_df.dropna(subset=["Overall"]).copy()
+            avg_overall = float(df_kpi["Overall"].mean()) if not df_kpi.empty else np.nan
+
+            base = alt.Chart(hour_df).encode(
+                x=alt.X("Jam:N", sort=sort_jam, title="Jam", axis=alt.Axis(labelAngle=0)),
+                y=alt.Y("Overall:Q", title="Overall (%)"),
             )
+            line = base.mark_line(point=alt.OverlayMarkDef(size=80), strokeWidth=4).encode(
+                tooltip=[
+                    alt.Tooltip("Jam:N", title="Jam"),
+                    alt.Tooltip("Overall:Q", title="Overall (%)", format=".2f"),
+                    alt.Tooltip("Jumlah Rekaman:Q", title="Jumlah Rekaman"),
+                ]
+            )
+            area = base.mark_area(opacity=0.18)
 
-            st.markdown("<hr style='margin: 25px 0 15px 0; border: 1px solid #e5e7eb;'>", unsafe_allow_html=True)
+            if not np.isnan(avg_overall):
+                rule = alt.Chart(pd.DataFrame({"avg": [avg_overall]})).mark_rule(strokeDash=[6, 6]).encode(y="avg:Q")
+                label = alt.Chart(pd.DataFrame({"avg": [avg_overall], "txt": [f"Avg {avg_overall:.1f}%"]})).mark_text(
+                    align="left", dx=6, dy=-6
+                ).encode(y="avg:Q", text="txt:N")
+                chart_hourly = style_chart(area + line + rule + label, height=320)
+            else:
+                chart_hourly = style_chart(area + line, height=320)
 
-        # =========================
-        # DETAIL DATA SCORING
-        # =========================
+            st.altair_chart(chart_hourly, use_container_width=True)
+
+            st.write("")
+            st.caption("Volume Rekaman per Jam")
+            bar_vol = alt.Chart(hour_df).mark_bar().encode(
+                x=alt.X("Jam:N", sort=sort_jam, title="Jam"),
+                y=alt.Y("Jumlah Rekaman:Q", title="Jumlah Rekaman"),
+                tooltip=[
+                    alt.Tooltip("Jam:N", title="Jam"),
+                    alt.Tooltip("Jumlah Rekaman:Q", title="Jumlah Rekaman"),
+                ],
+            )
+            st.altair_chart(style_chart(bar_vol, height=160), use_container_width=True)
+
+            st.write("")
+            st.subheader("Jam Rawan Minat (Warm Leads / M1–M3)")
+            st.caption("Bar = jumlah minat, Line = rate minat (%). Jam 12:00 dikosongkan.")
+
+            im2 = interest_masks(scope_df)
+            actual_mask2 = im2["actual_mask"] if im2 is not None else None
+
+            if actual_mask2 is None:
+                st.info("Tidak bisa buat grafik minat per jam karena kolom minat tidak tersedia.")
+            else:
+                dfhi = dfh.copy()
+                dfhi = dfhi[dfhi["_hour"] != 12].copy()
+                dfhi["_is_interest"] = actual_mask2.loc[dfhi.index].values
+
+                interest_rows = []
+                for h in hours:
+                    if h == 12:
+                        interest_rows.append({"Jam": "12:00", "Jumlah Minat": np.nan, "Jumlah Rekaman": np.nan, "Rate Minat": np.nan, "Hour": 12})
+                        continue
+
+                    d = dfhi[dfhi["_hour"] == h]
+                    total = int(len(d))
+                    minat = int(d["_is_interest"].sum())
+                    rate = (minat / total * 100.0) if total > 0 else np.nan
+
+                    interest_rows.append({
+                        "Jam": f"{h:02d}:00",
+                        "Jumlah Minat": (float(minat) if total > 0 else np.nan),
+                        "Jumlah Rekaman": (float(total) if total > 0 else np.nan),
+                        "Rate Minat": (round(float(rate), 2) if total > 0 else np.nan),
+                        "Hour": h
+                    })
+
+                hour_interest = pd.DataFrame(interest_rows).sort_values("Hour")
+
+                base_r = alt.Chart(hour_interest).encode(
+                    x=alt.X("Jam:N", sort=sort_jam, title="Jam", axis=alt.Axis(labelAngle=0)),
+                    y=alt.Y("Rate Minat:Q", title="Rate Minat (%)"),
+                    tooltip=[
+                        alt.Tooltip("Jam:N", title="Jam"),
+                        alt.Tooltip("Jumlah Minat:Q", title="Jumlah Minat"),
+                        alt.Tooltip("Jumlah Rekaman:Q", title="Jumlah Rekaman"),
+                        alt.Tooltip("Rate Minat:Q", title="Rate Minat (%)", format=".2f"),
+                    ],
+                )
+                line_r = base_r.mark_line(strokeWidth=4, point=alt.OverlayMarkDef(size=90))
+                area_r = base_r.mark_area(opacity=0.15)
+                st.altair_chart(style_chart(area_r + line_r, height=240), use_container_width=True)
+
+                bar_m = alt.Chart(hour_interest).mark_bar().encode(
+                    x=alt.X("Jam:N", sort=sort_jam, title="Jam"),
+                    y=alt.Y("Jumlah Minat:Q", title="Jumlah Minat"),
+                    tooltip=[
+                        alt.Tooltip("Jam:N", title="Jam"),
+                        alt.Tooltip("Jumlah Minat:Q", title="Jumlah Minat"),
+                        alt.Tooltip("Jumlah Rekaman:Q", title="Jumlah Rekaman"),
+                        alt.Tooltip("Rate Minat:Q", title="Rate Minat (%)", format=".2f"),
+                    ],
+                )
+                st.altair_chart(style_chart(bar_m, height=180), use_container_width=True)
+
+    # =========================
+    # TAB: DATA & DETAIL
+    # =========================
+    with tab3:
         st.subheader("Detail Data untuk Scoring")
-        st.dataframe(
-            light_table(dfm.head(50)),
-            use_container_width=True,
-            hide_index=True
-        )
-
-
-    if SENTIMENT_CATEGORY_COL not in df.columns or SENTIMENT_REASON_COL not in df.columns:
-        return None
-
-    dfx = df.copy()
-
-    # Normalisasi
-    dfx[SENTIMENT_CATEGORY_COL] = (
-        dfx[SENTIMENT_CATEGORY_COL]
-        .astype(str)
-        .str.strip()
-        .str.lower()
-    )
-
-    dfx[SENTIMENT_REASON_COL] = (
-        dfx[SENTIMENT_REASON_COL]
-        .astype(str)
-        .str.lower()
-    )
-
-    # =========================
-    # CARD 1 (Excel)
-    # =========================
-    total_excel = dfx[
-        dfx[SENTIMENT_CATEGORY_COL].isin(["potensi berminat", "ragu-ragu"])
-    ].shape[0]
-
-    # =========================
-    # FILTER TIDAK BERMINAT
-    # =========================
-    df_tidak = dfx[
-        dfx[SENTIMENT_CATEGORY_COL] == "tidak berminat"
-    ]
-
-    # =========================
-    # KEYWORD DETECTION
-    # =========================
-    keywords = [
-        "pikir-pikir",
-        "pikir pikir",
-        "pikir",
-        "pertimbangkan",
-        "diskusi"
-    ]
-
-    pattern = "|".join(keywords)
-
-    tambahan_dari_tidak = df_tidak[
-        df_tidak[SENTIMENT_REASON_COL].str.contains(pattern, na=False)
-    ].shape[0]
-
-    # =========================
-    # CARD 2 (Adjusted)
-    # =========================
-    total_adjusted = total_excel + tambahan_dari_tidak
-
-    return total_excel, total_adjusted
-
-def calculate_three_sentiment_cards(df: pd.DataFrame):
-
-    required_cols = [
-        SENTIMENT_CATEGORY_COL,
-        SENTIMENT_REASON_COL,
-        CALLRESULT_COL
-    ]
-
-    if not all(col in df.columns for col in required_cols):
-        return None
-
-    dfx = df.copy()
-
-    # =========================
-    # NORMALISASI
-    # =========================
-    dfx[SENTIMENT_CATEGORY_COL] = (
-        dfx[SENTIMENT_CATEGORY_COL]
-        .astype(str)
-        .str.strip()
-        .str.lower()
-    )
-
-    dfx[SENTIMENT_REASON_COL] = (
-        dfx[SENTIMENT_REASON_COL]
-        .astype(str)
-        .str.lower()
-    )
-
-    dfx[CALLRESULT_COL] = (
-        dfx[CALLRESULT_COL]
-        .astype(str)
-        .str.lower()
-    )
-
-    # =========================
-    # CARD 1 → AI SENTIMENT
-    # =========================
-    mask_ai = dfx[SENTIMENT_CATEGORY_COL].isin(
-        ["potensi berminat", "ragu-ragu"]
-    )
-
-    total_ai = mask_ai.sum()
-
-    # =========================
-    # CARD 2 → AGENT RESULT
-    # =========================
-    mask_agent = dfx[CALLRESULT_COL].str.contains(
-        r"\bm1\b|\bm2\b|\bm3\b",
-        na=False
-    )
-
-    total_agent = mask_agent.sum()
-
-    # =========================
-    # RULE 1
-    # Agent M1/M2/M3 tapi AI Tidak Berminat
-    # =========================
-    rule1 = mask_agent & (dfx[SENTIMENT_CATEGORY_COL] == "tidak berminat")
-
-    # =========================
-    # RULE 2
-    # Agent Tidak Minat tapi AI Potensi/Ragu
-    # =========================
-    mask_call_tidak = ~mask_agent
-    rule2 = mask_call_tidak & mask_ai
-
-    # =========================
-    # RULE 3
-    # Dua-duanya Tidak Berminat
-    # tapi ada keyword
-    # =========================
-    keywords = [
-        "pikir-pikir",
-        "pikir pikir",
-        "pikir",
-        "pertimbangkan",
-        "diskusi",
-        "diskusikan"
-    ]
-
-    pattern = "|".join(keywords)
-
-    rule3 = (
-        (~mask_agent) &
-        (dfx[SENTIMENT_CATEGORY_COL] == "tidak berminat") &
-        (dfx[SENTIMENT_REASON_COL].str.contains(pattern, na=False))
-    )
-
-    # =========================
-    # ACTUAL POTENSI (UNION SEMUA)
-    # =========================
-    actual_mask = mask_ai | mask_agent | rule3
-
-    total_actual = actual_mask.sum()
-
-    return total_ai, total_agent, total_actual, actual_mask
-
+        st.caption("Tabel minat actual customer dihapus (tidak ada data customer).")
+        st.dataframe(light_table(scope_df.head(50)), use_container_width=True, hide_index=True)
 
 # =========================
 # SIDEBAR: UPLOAD + LOGO
@@ -998,7 +1039,8 @@ st.markdown(
     <div class="hero">
       <p class="hero-title">QC Audio Dashboard</p>
       <div class="hero-sub">
-        Monitoring performa Mitra (Agent) dan Team Leader (TL) per minggu, per jam (08–17), dan ringkasan bulanan per aspek.
+        Monitoring performa Mitra (Agent) dan Team Leader (TL) otomatis (harian jika 1 tanggal, bulanan jika >1 tanggal),
+        per jam (08–17; 12:00 istirahat), ringkasan performa per aspek, serta grafik jam/tanggal rawan minat.
       </div>
     </div>
     """,
@@ -1006,29 +1048,48 @@ st.markdown(
 )
 st.write("")
 
+# =========================
+# GATE: WAIT UPLOAD
+# =========================
 if uploaded is None:
     st.info("Upload file QC dulu di sidebar untuk mulai.")
     st.stop()
 
+# =========================
+# SHOW FULLSCREEN LOADER WHILE READING + PREP
+# =========================
+loader = show_loading_overlay()
+
 try:
     df = load_data(uploaded)
 except Exception as e:
+    loader.empty()
     st.error(f"Gagal baca file: {e}")
     st.stop()
 
 missing = [c for c in [TL_COL, AGENT_COL] if c not in df.columns]
 if missing:
+    loader.empty()
     st.error(f"Kolom wajib tidak ditemukan: {missing}\n\nKolom yang ada: {list(df.columns)}")
     st.stop()
 
 df_clean = normalize_identity_cols(df)
 
+# =========================
+# SIDEBAR: KATEGORI PENILAIAN (ONLY)
+# =========================
 with st.sidebar:
     st.markdown("### Kategori Penilaian")
     mode = st.radio("Pilih yang dinilai:", ["Agent", "TL"], horizontal=True, key="mode_penilaian")
 
 tl_list = sorted(df_clean[TL_COL].unique().tolist())
 
+# selesai fase "memproses file" (loader ditutup sebelum render utama)
+loader.empty()
+
+# =========================
+# RENDER MAIN
+# =========================
 if mode == "Agent":
     with st.sidebar:
         st.markdown("### 👤 Penilaian Agent")
@@ -1051,7 +1112,12 @@ if mode == "Agent":
 <span class="badge">TL: <b>{selected_tl}</b></span>
 &nbsp; <span class="badge">Mitra: <b>{selected_agent}</b></span>
 """
-    run_performance_block(df_base=df_sel, header_badges_html=header_badges, title_context="Mitra yang terpilih:")
+    run_performance_block(
+        df_base=df_sel,
+        header_badges_html=header_badges,
+        title_context="Mitra yang terpilih:",
+        key_prefix="agent_view"
+    )
 
 else:
     with st.sidebar:
@@ -1075,7 +1141,12 @@ else:
 <span class="badge">TL: <b>{selected_tl}</b></span>
 &nbsp; <span class="badge">Total Agent: <b>{agent_count}</b></span>
 """
-    run_performance_block(df_base=df_sel, header_badges_html=header_badges, title_context="Team Leader yang dipilih:")
+    run_performance_block(
+        df_base=df_sel,
+        header_badges_html=header_badges,
+        title_context="Team Leader yang dipilih:",
+        key_prefix="tl_view"
+    )
 
 st.write("")
 st.caption("© QC Audio Dashboard")
