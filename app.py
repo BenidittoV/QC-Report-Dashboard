@@ -69,7 +69,7 @@ ASPECT_FRIENDLY_NAMES = {
 LOADING_IMAGE_URL = "https://oss-api.berijalan.id/web-berijalan/img/logo tab.webp"
 
 # =========================
-# MODERN CSS + LOADING OVERLAY
+# MODERN CSS + FULLSCREEN LOADER (AUTO SHOW DURING UPLOAD + PROCESSING)
 # =========================
 CUSTOM_CSS = f"""
 <style>
@@ -275,7 +275,9 @@ section[data-testid="stSidebar"] div[data-testid="stRadio"] div[role="radiogroup
 }}
 
 /* =========================
-   LOADING OVERLAY (FULLSCREEN)
+   LOADING OVERLAY
+   - auto tampil saat upload (progress UI muncul)
+   - auto tampil saat python proses (processing-flag ada)
    ========================= */
 @keyframes spin {{
   0%   {{ transform: rotate(0deg); }}
@@ -288,7 +290,7 @@ section[data-testid="stSidebar"] div[data-testid="stRadio"] div[role="radiogroup
   height: 100vh;
   background: rgba(255,255,255,0.92);
   z-index: 999999;
-  display: flex;
+  display: none; /* default hidden */
   align-items: center;
   justify-content: center;
 }}
@@ -314,23 +316,42 @@ section[data-testid="stSidebar"] div[data-testid="stRadio"] div[role="radiogroup
   color: #111827;
   opacity: 0.9;
 }}
+
+/* Upload in-progress detectors (Streamlit DOM bisa beda versi, jadi dibuat beberapa selector) */
+html:has(div[data-testid="stFileUploader"] div[role="progressbar"]) #loading-overlay,
+body:has(div[data-testid="stFileUploader"] div[role="progressbar"]) #loading-overlay,
+html:has(div[data-testid="stFileUploader"] progress) #loading-overlay,
+body:has(div[data-testid="stFileUploader"] progress) #loading-overlay,
+html:has(div[data-testid="stFileUploader"] [data-testid="stSpinner"]) #loading-overlay,
+body:has(div[data-testid="stFileUploader"] [data-testid="stSpinner"]) #loading-overlay,
+html:has(div[data-testid="stFileUploader"] [data-testid="stFileUploaderProgress"]) #loading-overlay,
+body:has(div[data-testid="stFileUploader"] [data-testid="stFileUploaderProgress"]) #loading-overlay,
+html:has(div[data-testid="stFileUploader"] [data-testid="stProgress"]) #loading-overlay,
+body:has(div[data-testid="stFileUploader"] [data-testid="stProgress"]) #loading-overlay {{
+  display: flex;
+}}
+
+/* Python processing flag (kita inject sementara) */
+html:has(#processing-flag) #loading-overlay,
+body:has(#processing-flag) #loading-overlay {{
+  display: flex;
+}}
 </style>
 """
 st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 
-LOADING_OVERLAY_HTML = f"""
-<div id="loading-overlay">
-  <div class="loading-inner">
-    <img class="loading-logo" src="{LOADING_IMAGE_URL}" />
-    <div class="loading-text">Memproses file…</div>
-  </div>
-</div>
-"""
-
-def show_loading_overlay():
-    ph = st.empty()
-    ph.markdown(LOADING_OVERLAY_HTML, unsafe_allow_html=True)
-    return ph
+# Render overlay HTML SELALU (default hidden via CSS)
+st.markdown(
+    f"""
+    <div id="loading-overlay">
+      <div class="loading-inner">
+        <img class="loading-logo" src="{LOADING_IMAGE_URL}" />
+        <div class="loading-text">Memproses file…</div>
+      </div>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
 
 # =========================
 # HELPERS
@@ -470,7 +491,7 @@ def parse_metadata_datecall(series: pd.Series) -> pd.Series:
     s_low = s.str.lower()
     for nama, mm in bulan.items():
         s_low = s_low.str.replace(fr"\b{nama}\b", mm, regex=True)
-    s_low = s_low.str.replace(r"^(\d{{1,2}})\s+(\d{{2}})\s+(\d{{4}})\s+", r"\1-\2-\3 ", regex=True)
+    s_low = s_low.str.replace(r"^(\d{1,2})\s+(\d{2})\s+(\d{4})\s+", r"\1-\2-\3 ", regex=True)
     return pd.to_datetime(s_low, format="%d-%m-%Y %H:%M:%S", errors="coerce")
 
 def ensure_date_and_dt(df: pd.DataFrame) -> pd.DataFrame:
@@ -488,12 +509,12 @@ def ensure_date_and_dt(df: pd.DataFrame) -> pd.DataFrame:
             out[DATE_COL] = out["_dt_call"].dt.floor("D")
         else:
             st.error(f"Tidak ada `{DATE_COL}` dan `{DATETIME_COL}` juga tidak tersedia/valid. Minimal salah satu harus ada.")
-            return pd.DataFrame()
+            st.stop()
 
     out = out.dropna(subset=[DATE_COL])
     if out.empty:
         st.warning("Semua tanggal gagal diparse. Pastikan format tanggal valid.")
-        return pd.DataFrame()
+        st.stop()
 
     return out
 
@@ -568,29 +589,23 @@ def run_performance_block(df_base: pd.DataFrame, header_badges_html: str, title_
     df_base = filter_call_types(df_base)
     if df_base.empty:
         st.warning("Tidak ada data setelah filter call type.")
-        return
+        st.stop()
 
     df_base = ensure_date_and_dt(df_base)
-    if df_base.empty:
-        return
 
-    # AUTO DETECT MODE:
     unique_days = int(df_base[DATE_COL].dt.date.nunique())
     time_mode = "Harian" if unique_days <= 1 else "Bulanan"
 
-    # aspek
     aspect_cols = [c for c in ASPECT_COLUMNS_CANDIDATES if c in df_base.columns]
     missing_aspects = [c for c in ASPECT_COLUMNS_CANDIDATES if c not in df_base.columns]
     if not aspect_cols:
         st.error("Tidak ada kolom aspek yang ditemukan di file untuk dihitung.")
-        return
+        st.stop()
 
     selected_period_label = ""
     selected_month = None
 
-    # =========================
-    # SELECT PERIOD (NOT IN SIDEBAR)
-    # =========================
+    # ===== select period =====
     if time_mode == "Bulanan":
         df_base["_month"] = df_base[DATE_COL].dt.to_period("M").astype(str)
         month_list = sorted(df_base["_month"].unique().tolist())
@@ -606,7 +621,7 @@ def run_performance_block(df_base: pd.DataFrame, header_badges_html: str, title_
         dfm = df_base[df_base["_month"] == selected_month].copy()
         if dfm.empty:
             st.warning("Tidak ada data untuk bulan terpilih.")
-            return
+            st.stop()
 
         yy, mm = selected_month.split("-")
         yy, mm = int(yy), int(mm)
@@ -632,7 +647,7 @@ def run_performance_block(df_base: pd.DataFrame, header_badges_html: str, title_
     else:
         if df_base["_dt_call"].notna().sum() == 0:
             st.error(f"Mode Harian membutuhkan `{DATETIME_COL}` yang valid (contoh: 19 Februari 2026 08:07:05).")
-            return
+            st.stop()
 
         only_day = df_base[DATE_COL].dt.date.unique()
         only_day = only_day[0] if len(only_day) else "-"
@@ -673,9 +688,7 @@ def run_performance_block(df_base: pd.DataFrame, header_badges_html: str, title_
         overall_value = round(float(pd.to_numeric(result_df["Persentase Harian (%)"], errors="coerce").mean()), 2)
         scope_df = dfm
 
-    # =========================
-    # KPI HEADER (kotak mitra) + period badge
-    # =========================
+    # ===== header cards =====
     period_badges = f"""
 &nbsp; <span class="badge">Mode: <b>{time_mode}</b></span>
 &nbsp; <span class="badge">Periode: <b>{selected_period_label}</b></span>
@@ -702,9 +715,7 @@ def run_performance_block(df_base: pd.DataFrame, header_badges_html: str, title_
         with st.expander("ℹ️ Beberapa kolom aspek tidak ditemukan (aman, hanya di-skip)"):
             st.write(missing_aspects)
 
-    # =========================
-    # KPI MINAT
-    # =========================
+    # ===== KPI minat =====
     im = interest_masks(scope_df)
     ai_mask = agent_mask = actual_mask = None
     interest_mode = None
@@ -732,9 +743,7 @@ def run_performance_block(df_base: pd.DataFrame, header_badges_html: str, title_
             sc2.metric("Minat menurut Call Result (M1/M2/M3/Warm)", int(agent_mask.sum()))
             sc3.metric("Minat Aktual (Rekonsiliasi)", int(actual_mask.sum()))
 
-    # =========================
-    # TABS
-    # =========================
+    # ===== tabs =====
     st.markdown("<hr style='margin: 25px 0 15px 0; border: 1px solid #e5e7eb;'>", unsafe_allow_html=True)
 
     if time_mode == "Bulanan":
@@ -743,9 +752,7 @@ def run_performance_block(df_base: pd.DataFrame, header_badges_html: str, title_
         tab1, tab_hour, tab3 = st.tabs(["Overview", "Hourly Trend", "Data & Detail"])
         tab2 = None
 
-    # =========================
-    # TAB 1: OVERVIEW
-    # =========================
+    # ===== tab overview =====
     with tab1:
         title = "Ringkasan Performa Bulanan per Aspek" if time_mode == "Bulanan" else "Ringkasan Performa Harian per Aspek"
         st.subheader(title)
@@ -765,7 +772,8 @@ def run_performance_block(df_base: pd.DataFrame, header_badges_html: str, title_
         key_pct = "Persentase Bulanan (%)" if time_mode == "Bulanan" else "Persentase Harian (%)"
         with colL:
             st.markdown("### Top 5 Aspek Terlemah")
-            st.dataframe(light_table(show_df_display.head(5)[["Aspek", key_pct, "Grade"]]), use_container_width=True, hide_index=True)
+            st.dataframe(light_table(show_df_display.head(5)[["Aspek", key_pct, "Grade"]]),
+                         use_container_width=True, hide_index=True)
         with colR:
             st.markdown("### Top 5 Aspek Terkuat")
             st.dataframe(
@@ -774,9 +782,7 @@ def run_performance_block(df_base: pd.DataFrame, header_badges_html: str, title_
                 hide_index=True
             )
 
-    # =========================
-    # TAB 2: WEEKLY TREND (ONLY BULANAN)
-    # =========================
+    # ===== tab weekly trend (bulanan only) =====
     if time_mode == "Bulanan" and tab2 is not None:
         with tab2:
             st.subheader("Trend Overall per Minggu")
@@ -875,9 +881,7 @@ def run_performance_block(df_base: pd.DataFrame, header_badges_html: str, title_
                 )
                 st.altair_chart(style_chart(bar_cnt, height=180), use_container_width=True)
 
-    # =========================
-    # TAB: HOURLY TREND
-    # =========================
+    # ===== tab hourly trend =====
     with tab_hour:
         st.subheader("Performa Overall per Jam (08:00–17:00)")
         st.caption("Jam 12:00–13:00 dianggap istirahat → dikosongkan.")
@@ -1006,9 +1010,7 @@ def run_performance_block(df_base: pd.DataFrame, header_badges_html: str, title_
                 )
                 st.altair_chart(style_chart(bar_m, height=180), use_container_width=True)
 
-    # =========================
-    # TAB: DATA & DETAIL
-    # =========================
+    # ===== tab data =====
     with tab3:
         st.subheader("Detail Data untuk Scoring")
         st.caption("Tabel minat actual customer dihapus (tidak ada data customer).")
@@ -1056,24 +1058,28 @@ if uploaded is None:
     st.stop()
 
 # =========================
-# SHOW FULLSCREEN LOADER WHILE READING + PREP
+# SHOW LOADER DURING PYTHON PROCESS (upload in-progress handled by CSS :has(...))
 # =========================
-loader = show_loading_overlay()
+processing_flag = st.empty()
+processing_flag.markdown('<div id="processing-flag"></div>', unsafe_allow_html=True)
 
 try:
     df = load_data(uploaded)
 except Exception as e:
-    loader.empty()
+    processing_flag.empty()
     st.error(f"Gagal baca file: {e}")
     st.stop()
 
 missing = [c for c in [TL_COL, AGENT_COL] if c not in df.columns]
 if missing:
-    loader.empty()
+    processing_flag.empty()
     st.error(f"Kolom wajib tidak ditemukan: {missing}\n\nKolom yang ada: {list(df.columns)}")
     st.stop()
 
 df_clean = normalize_identity_cols(df)
+
+# done processing
+processing_flag.empty()
 
 # =========================
 # SIDEBAR: KATEGORI PENILAIAN (ONLY)
@@ -1083,9 +1089,6 @@ with st.sidebar:
     mode = st.radio("Pilih yang dinilai:", ["Agent", "TL"], horizontal=True, key="mode_penilaian")
 
 tl_list = sorted(df_clean[TL_COL].unique().tolist())
-
-# selesai fase "memproses file" (loader ditutup sebelum render utama)
-loader.empty()
 
 # =========================
 # RENDER MAIN
