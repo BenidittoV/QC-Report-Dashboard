@@ -313,37 +313,39 @@ section[data-testid="stSidebar"] div[data-testid="stRadio"] div[role="radiogroup
 
   filter: drop-shadow(0 18px 36px rgba(0,0,0,0.16));
 
-  /* diperlambat lagi biar kebaca */
-  animation: qcPulseSpin 1.50s infinite;
+  /* penting: linear supaya "speed curve" dikontrol oleh keyframes (nggak ada jeda) */
+  animation: qcPulseSpin 1.50s linear infinite;
 }}
 
 /*
-Timeline (1.50s):
-0–10%  (0.15s): scale 1 -> 0.88, rotasi pelan
-10–40% (0.45s): percepatan
-40–70% (0.45s): perlambatan
-70–80% (0.15s): pop bigger
-80–100%(0.30s): tahan & settle
+Flow:
+- scale mengecil dulu
+- rotasi selalu naik (0 -> 1080deg) jadi "beneran muter" tanpa stop
+- speed pelan -> cepat -> pelan (terasa shuriken)
+- lalu membesar lagi
 */
 @keyframes qcPulseSpin {{
   0%   {{ transform: scale(1.00) rotate(0deg); }}
 
-  /* shrink */
-  10%  {{ transform: scale(0.88) rotate(10deg); }}
+  /* shrink (halus) */
+  8%   {{ transform: scale(0.92) rotate(18deg); }}
+  14%  {{ transform: scale(0.88) rotate(45deg); }}
 
-  /* accel (lonjakan derajat makin besar) */
-  20%  {{ transform: scale(0.88) rotate(85deg); }}
-  30%  {{ transform: scale(0.88) rotate(220deg); }}
-  40%  {{ transform: scale(0.88) rotate(345deg); }}
+  /* accel (kenaikan derajat makin besar) */
+  22%  {{ transform: scale(0.88) rotate(140deg); }}
+  30%  {{ transform: scale(0.88) rotate(320deg); }}
+  38%  {{ transform: scale(0.88) rotate(560deg); }}
+  46%  {{ transform: scale(0.88) rotate(820deg); }}
 
-  /* decel (lonjakan derajat makin kecil) */
-  55%  {{ transform: scale(0.88) rotate(358deg); }}
-  70%  {{ transform: scale(0.88) rotate(360deg); }}
+  /* decel (kenaikan derajat makin kecil) */
+  58%  {{ transform: scale(0.88) rotate(980deg); }}
+  70%  {{ transform: scale(0.88) rotate(1045deg); }}
+  78%  {{ transform: scale(0.88) rotate(1068deg); }}
 
-  /* pop + settle */
-  80%  {{ transform: scale(1.08) rotate(360deg); }}
-  90%  {{ transform: scale(1.02) rotate(360deg); }}
-  100% {{ transform: scale(1.00) rotate(360deg); }}
+  /* pop + settle sambil masih muter pelan */
+  86%  {{ transform: scale(1.08) rotate(1078deg); }}
+  93%  {{ transform: scale(1.02) rotate(1084deg); }}
+  100% {{ transform: scale(1.00) rotate(1080deg); }}
 }}
 
 @media (prefers-reduced-motion: reduce) {{
