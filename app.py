@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 import json
+from typing import Optional
 
 # =========================
 # PAGE CONFIG
@@ -470,8 +471,18 @@ def week_ranges_sun_sat_for_month(year: int, month: int):
 
 def light_table(df: pd.DataFrame):
     df = make_arrow_safe(df)
+
+    fmt = {}
     num_cols = df.select_dtypes(include=[np.number]).columns
-    fmt = {c: "{:.2f}" for c in num_cols}
+    for c in num_cols:
+        try:
+            if pd.api.types.is_integer_dtype(df[c]):
+                fmt[c] = "{:,.0f}"
+            else:
+                fmt[c] = "{:.2f}"
+        except Exception:
+            fmt[c] = "{:.2f}"
+
     return (
         df.style
         .format(fmt, na_rep="")
@@ -610,6 +621,54 @@ def interest_masks(df: pd.DataFrame):
 
     return None
 
+def build_agent_interest_summary(scope_df: pd.DataFrame) -> Optional[pd.DataFrame]:
+    """
+    Untuk mode TL: tampilkan ringkasan per Agent:
+    - Jumlah Minat
+    - Jumlah Tidak Minat
+    - Jumlah Rekaman
+    Mengikuti interest_masks(scope_df) (actual_mask).
+    """
+    if AGENT_COL not in scope_df.columns:
+        return None
+
+    im = interest_masks(scope_df)
+    if im is None:
+        return None
+
+    actual_mask = im["actual_mask"]
+
+    d = scope_df.copy()
+    d[AGENT_COL] = d[AGENT_COL].astype(str).str.strip()
+    d = d[(d[AGENT_COL] != "") & (d[AGENT_COL].str.lower() != "nan")]
+
+    m = actual_mask.reindex(d.index).fillna(False).astype(bool)
+    d["_is_interest"] = m.values
+
+    summary = (
+        d.groupby(AGENT_COL, as_index=False)
+        .agg(
+            jumlah_minat=("_is_interest", "sum"),
+            jumlah_rekaman=("_is_interest", "size"),
+        )
+    )
+    summary["jumlah_tidak_minat"] = summary["jumlah_rekaman"] - summary["jumlah_minat"]
+
+    summary = summary.rename(
+        columns={
+            AGENT_COL: "Agent",
+            "jumlah_minat": "Jumlah Minat",
+            "jumlah_tidak_minat": "Jumlah Tidak Minat",
+            "jumlah_rekaman": "Jumlah Rekaman",
+        }
+    ).sort_values(by=["Jumlah Minat", "Jumlah Rekaman"], ascending=[False, False])
+
+    # pastikan integer
+    for c in ["Jumlah Minat", "Jumlah Tidak Minat", "Jumlah Rekaman"]:
+        summary[c] = pd.to_numeric(summary[c], errors="coerce").fillna(0).astype(int)
+
+    return summary
+
 # ===== chart helpers =====
 def style_chart(chart, height: int):
     return (
@@ -621,7 +680,13 @@ def style_chart(chart, height: int):
 # =========================
 # CORE RENDER BLOCK
 # =========================
-def run_performance_block(df_base: pd.DataFrame, header_badges_html: str, title_context: str, key_prefix: str):
+def run_performance_block(
+    df_base: pd.DataFrame,
+    header_badges_html: str,
+    title_context: str,
+    key_prefix: str,
+    show_agent_interest_table_in_tab3: bool = False,
+):
     df_base = filter_call_types(df_base)
     if df_base.empty:
         st.warning("Tidak ada data setelah filter call type.")
@@ -808,8 +873,11 @@ def run_performance_block(df_base: pd.DataFrame, header_badges_html: str, title_
         key_pct = "Persentase Bulanan (%)" if time_mode == "Bulanan" else "Persentase Harian (%)"
         with colL:
             st.markdown("### Top 5 Aspek Terlemah")
-            st.dataframe(light_table(show_df_display.head(5)[["Aspek", key_pct, "Grade"]]),
-                         use_container_width=True, hide_index=True)
+            st.dataframe(
+                light_table(show_df_display.head(5)[["Aspek", key_pct, "Grade"]]),
+                use_container_width=True,
+                hide_index=True
+            )
         with colR:
             st.markdown("### Top 5 Aspek Terkuat")
             st.dataframe(
@@ -866,7 +934,10 @@ def run_performance_block(df_base: pd.DataFrame, header_badges_html: str, title_
             bar_week = alt.Chart(chart_df).mark_bar().encode(
                 x=alt.X("Minggu:N", title="Minggu"),
                 y=alt.Y("Jumlah Rekaman:Q", title="Jumlah Rekaman"),
-                tooltip=[alt.Tooltip("Minggu:N", title="Minggu"), alt.Tooltip("Jumlah Rekaman:Q", title="Jumlah Rekaman")]
+                tooltip=[
+                    alt.Tooltip("Minggu:N", title="Minggu"),
+                    alt.Tooltip("Jumlah Rekaman:Q", title="Jumlah Rekaman")
+                ]
             )
             st.altair_chart(style_chart(bar_week, height=160), use_container_width=True)
 
@@ -903,6 +974,7 @@ def run_performance_block(df_base: pd.DataFrame, header_badges_html: str, title_
                 )
                 line_rate = base_rate.mark_line(strokeWidth=4, point=alt.OverlayMarkDef(size=90))
                 area_rate = base_rate.mark_area(opacity=0.15)
+
                 st.altair_chart(style_chart(area_rate + line_rate, height=260), use_container_width=True)
 
                 bar_cnt = alt.Chart(daily).mark_bar().encode(
@@ -1046,8 +1118,25 @@ def run_performance_block(df_base: pd.DataFrame, header_badges_html: str, title_
                 )
                 st.altair_chart(style_chart(bar_m, height=180), use_container_width=True)
 
-    # ===== tab data =====
+    # ===== tab data & detail =====
     with tab3:
+        st.subheader("Data & Detail")
+
+        if show_agent_interest_table_in_tab3:
+            st.markdown("### Ringkasan Agent (Minat vs Tidak Minat)")
+            st.caption("Mengikuti filter call type + periode yang sedang dipilih (harian/bulanan).")
+
+            agent_summary = build_agent_interest_summary(scope_df)
+            if agent_summary is None:
+                st.info(
+                    "Tidak bisa tampilkan ringkasan minat per Agent karena kolom minat tidak tersedia. "
+                    f"Butuh: `{SENTIMENT_CATEGORY_COL}`+`{SENTIMENT_REASON_COL}` atau `{LOV3_COL}`, dan `{CALLRESULT_COL}`."
+                )
+            else:
+                st.dataframe(light_table(agent_summary), use_container_width=True, hide_index=True)
+
+            st.markdown("<hr style='margin: 14px 0; border: 1px solid #e5e7eb;'>", unsafe_allow_html=True)
+
         st.subheader("Detail Data untuk Scoring")
         st.caption("Tabel minat actual customer dihapus (tidak ada data customer).")
         st.dataframe(light_table(scope_df.head(50)), use_container_width=True, hide_index=True)
@@ -1114,7 +1203,6 @@ if missing:
 
 df_clean = normalize_identity_cols(df)
 
-# done processing
 processing_flag.empty()
 
 # =========================
@@ -1155,7 +1243,8 @@ if mode == "Agent":
         df_base=df_sel,
         header_badges_html=header_badges,
         title_context="Mitra yang terpilih:",
-        key_prefix="agent_view"
+        key_prefix="agent_view",
+        show_agent_interest_table_in_tab3=False,
     )
 
 else:
@@ -1184,7 +1273,8 @@ else:
         df_base=df_sel,
         header_badges_html=header_badges,
         title_context="Team Leader yang dipilih:",
-        key_prefix="tl_view"
+        key_prefix="tl_view",
+        show_agent_interest_table_in_tab3=True,  # <-- tabel ringkasan agent muncul di tab Data & Detail
     )
 
 st.write("")
