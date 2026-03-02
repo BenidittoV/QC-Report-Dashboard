@@ -66,7 +66,7 @@ ASPECT_FRIENDLY_NAMES = {
     "raw_data_say_ref_contract_stat": "Refer Contract Status",
 }
 
-LOADING_IMAGE_URL = "https://static.vecteezy.com/system/resources/previews/010/754/321/non_2x/loading-icon-logo-design-template-illustration-free-vector.jpg"
+LOADING_IMAGE_URL = "https://oss-api.berijalan.id/web-berijalan/img/logo tab.webp"
 
 # =========================
 # MODERN CSS + LOADING OVERLAY
